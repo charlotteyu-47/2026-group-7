@@ -40,13 +40,13 @@ All background assets are standard **1920x1080** resolution unless otherwise spe
 The gameplay area is divided into four lanes: Lanes 1 & 4 (Sidewalks, 200px) and Lanes 2 & 3 (Road, 260px).
 ## Road Obstacles (Lanes 2 & 3)
 
-| **Asset Name**             | **Dimensions** | **Description**                                                            | Path              |
-| -------------------------- | -------------- | -------------------------------------------------------------------------- | ----------------- |
-| **obstacle_bus**           | 170x420        | A large double-decker public transit bus (First Bus style).                | ArtAsset\Obstacle |
-| **obstacle_ambulance**     | 140x260        | Emergency medical vehicle (Yellow ambulance).                              | ArtAsset\Obstacle |
-| **obstacle_car**           | 110x210        | Standard passenger automobile.                                             | ArtAsset\Obstacle |
-| **obstacle_scooter_rider** | 110*230        | A motorized scooter operated by a driver.                                  | ArtAsset\Obstacle |
-| **obstacle_puddle**        | 260x120        | Environmental hazard; appears exclusively during rainy weather conditions. | ArtAsset\Obstacle |
+| **Asset Name**         | **Dimensions** | **Description**                                                            | Path              |
+| ---------------------- | -------------- | -------------------------------------------------------------------------- | ----------------- |
+| **obstacle_bus**       | 170x420        | A large double-decker public transit bus (First Bus style).                | ArtAsset\Obstacle |
+| **obstacle_ambulance** | 140x260        | Emergency medical vehicle (Yellow ambulance).                              | ArtAsset\Obstacle |
+| **obstacle_car**       | 110x210        | Standard passenger automobile.                                             | ArtAsset\Obstacle |
+| **obstacle_scooter**   | 110*230        | A motorized scooter operated by a driver.                                  | ArtAsset\Obstacle |
+| **obstacle_puddle**    | 260x120        | Environmental hazard; appears exclusively during rainy weather conditions. | ArtAsset\Obstacle |
 ## Sidewalk Obstacles (Lanes 1 & 4)
 | **Asset Name**        | **Dimensions** | **Description**                                                 | Path              |
 | --------------------- | -------------- | --------------------------------------------------------------- | ----------------- |
@@ -54,10 +54,10 @@ The gameplay area is divided into four lanes: Lanes 1 & 4 (Sidewalks, 200px) and
 | **obstacle_homeless** | 200x200        | A seated NPC representing a homeless individual.                | ArtAsset\Obstacle |
 | **obstacle_flyer**    | 810x970        | Item with three visual states: Intact, crumpled, and balled up. | ArtAsset\Obstacle |
 ## Power-ups
-| **Asset Name**            | **Dimensions** | **Description**                    | Path              |
-| ------------------------- | -------------- | ---------------------------------- | ----------------- |
-| **powerup_coffee**        | 96x96          | A coffee cup collectible.          | ArtAsset\Power-up |
-| **powerup_scooter_empty** | 140x160        | An unoccupied scooter collectible. | ArtAsset\Power-up |
+| **Asset Name**      | **Dimensions** | **Description**                    | Path              |
+| ------------------- | -------------- | ---------------------------------- | ----------------- |
+| **powerup_coffee**  | 96x96          | A coffee cup collectible.          | ArtAsset\Power-up |
+| **powerup_scooter** | 140x160        | An unoccupied scooter collectible. | ArtAsset\Power-up |
 # 4. Backpack Items
 | **Asset Name**    | **Dimensions** | **Description**        | Path              |
 | ----------------- | -------------- | ---------------------- | ----------------- |
