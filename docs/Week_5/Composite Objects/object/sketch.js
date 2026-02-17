@@ -33,7 +33,7 @@ class MRect {
         this.ypos = iyp; // rect yposition
         this.d = id; // single bar distance
         this.t = it; // number of bars
-        this.col = color(random(255), random(255), random(255)); // 固定颜色
+        this.col = color(random(255), random(255), random(255));
     }
 
     move(posX, posY, damping) {
