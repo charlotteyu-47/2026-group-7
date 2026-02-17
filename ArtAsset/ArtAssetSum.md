@@ -8,9 +8,6 @@ All background assets are standard **1920x1080** resolution unless otherwise spe
 | **bg_light_rain** | 1920x1080      | Overcast with grey clouds and minor puddles; features muted lighting and a grounded yet surreal tone.       |
 | **bg_heavy_rain** | 1920x1080      | Dark, heavy overcast with significant puddles and intense rain effects; realistic and somber color palette. |
 | **bg_game_start** | 1920x1080      | Uphill view of Bristol featuring a pixel filter; the Wills Memorial Building serves as the focal point.     |
-| **Segment A**     | 1920x1080      | Urban commercial zone: Coffee shops, sandwich shops, newsagents, and banks.                                 |
-| **Segment B**     | 1920x1080      | Mixed-use zone: Restaurants, residential flats, modern glass offices, and alleyways.                        |
-| **Segment C**     | 1920x1080      | Academic zone: University facades, libraries, bookshops, and student union buildings.                       |
 | **bg_destination**         | 1920x1080      | The end of road, the Wills Memorial Building.                                                               |
 | **bg_dialogue**         | 1920x1080      | In library, player and NPC dialogue scene.                                                               |
 | **bg_news**         | 1920x1080      | News report on incident.                                                               |
@@ -21,16 +18,22 @@ All background assets are standard **1920x1080** resolution unless otherwise spe
 | **bg_bedroom**  | 1920x1080      | A cluttered student dormitory interior.                          |
 | **bg_hospital** | 1920x1080      | Interior view of a hospital ceiling featuring surgical lighting. |
 # 2. Character Assets
-## Animations & Portraits
+## Portraits
 | **Asset Name**      | **Dimensions** | **Formal Description**                                                      |
 | ------------------- | -------------- | --------------------------------------------------------------------------- |
-| **main_player_run** | 70x150         | 4-frame running animation cycle for the protagonist.                        |
 | **portrait_player** | 380x380         | Dialogue portrait of the protagonist wearing a helmet and riding a scooter. |
 | **portrait_wiola** | 380x380        | Brown long hair, gentle, no glasses, wearing windbreaker.                 |
 | **portrait_layla** | 380x380        | mysterious, short-haired, wearing a hoodie.                |
 | **portrait_yuki** | 380x380        | irritable, repetitive in speech, appears artificial/fake, curly hair, dress.               |
 | **portrait_raymond** | 380x380        | robot, abstract, eerie expression, long straight black hair T-shirt.                |
 | **portrait_charlotte** | 380x380        | Most normal, a true friend, short hair, red hair, leather jacket.                |
+
+## SpriteSheets
+| **Asset Name**      | **Dimensions** | **Formal Description**                                                      |**Path**|
+| ------------------- | -------------- | --------------------------------------------------------------------------- |---|
+| **main_player_run** | 256x256(4-frame)         | 4-frame running animation cycle for the protagonist.|ArtAsset\Character\main_player\sprite_frames\sprite_sheets|
+| **main_player_move** | 256x256(5-frame)         | 5-frame walking animation cycle. |ArtAsset\Character\main_player\sprite_frames\sprite_sheets|
+
 # 3. Obstacles & Power-ups
 
 The gameplay area is divided into four lanes: Lanes 1 & 4 (Sidewalks, 200px) and Lanes 2 & 3 (Road, 260px).
