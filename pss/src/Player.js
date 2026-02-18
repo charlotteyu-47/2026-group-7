@@ -10,37 +10,53 @@ class Player {
      */
     constructor() {
         this.resetStatsToDefault();
-        this.distanceRun   = 0;
+        this.distanceRun = 0;
         this.playTimeFrames = 0;
 
         // Sprite dimensions (flat pixel aesthetic)
-        this.width  = 120;
-        this.height = 160;
+        this.width = 140;
+        this.height = 140;
         this.hitboxW = 60;
 
         // Walkable X range: left sidewalk (500) to right sidewalk (1420)
         this.minX = 500 + this.width / 2;
         this.maxX = 1420 - this.width / 2;
 
-        // Default spawn position for the bedroom scene
-        this.x = 500;
-        this.y = 540;
+        // Fixed run lanes (ordered by lane1..lane4)
+        this.runLaneCenters = [
+            GLOBAL_CONFIG.lanes.lane1,
+            GLOBAL_CONFIG.lanes.lane2,
+            GLOBAL_CONFIG.lanes.lane3,
+            GLOBAL_CONFIG.lanes.lane4
+        ];
+        this.currentLaneIndex = 0;
+        this.targetLaneIndex = 0;
+        this.laneVelocityX = 0;
+        this.laneSpringK = 0.22;//Adsorption strength
+        this.laneSpringDamping = 0.50;//The smaller the value, the faster it stops.
+        this.leftHeld = false;
+        this.rightHeld = false;
+
+        // Default spawn position for the day run scene
+        this.x = this.runLaneCenters[this.currentLaneIndex];
+        this.y = PLAYER_RUN_FOOT_Y;
 
         // Walking animation state
-        this.dir        = 'south';
-        this.animFrame  = 0;
-        this.isWalking  = false;
-        this.animSpeed  = 0.18;
+        this.dir = 'south';
+        this.animFrame = 0;
+        this.isWalking = false;
+        this.animSpeed = 0.18;
+        this.runAnimSpeed = 0.28;
     }
 
     /**
      * Restores the entity to the baseline values defined in PLAYER_DEFAULTS.
      */
     resetStatsToDefault() {
-        this.health      = PLAYER_DEFAULTS.baseHealth;
-        this.maxHealth   = PLAYER_DEFAULTS.baseHealth;
+        this.health = PLAYER_DEFAULTS.baseHealth;
+        this.maxHealth = PLAYER_DEFAULTS.baseHealth;
         this.healthDecay = PLAYER_DEFAULTS.healthDecay;
-        this.baseSpeed   = PLAYER_DEFAULTS.baseSpeed;
+        this.baseSpeed = PLAYER_DEFAULTS.baseSpeed;
     }
 
     /**
@@ -48,8 +64,14 @@ class Player {
      */
     applyLevelStats(dayID) {
         this.resetStatsToDefault();
-        this.distanceRun    = 0;
+        this.distanceRun = 0;
         this.playTimeFrames = 0;
+        this.currentLaneIndex = 0;
+        this.targetLaneIndex = 0;
+        this.laneVelocityX = 0;
+        this.x = this.runLaneCenters[this.currentLaneIndex];
+        // In DAY_RUN, default forward-running view should be back-facing.
+        this.dir = 'north';
     }
 
     // ─── CORE UPDATE ─────────────────────────────────────────────────────────
@@ -96,12 +118,13 @@ class Player {
             }
         }
 
-        // Advance walk animation, or reset to idle when stationary
-        if (this.isWalking) {
-            this.animFrame += this.animSpeed;
-        } else {
-            this.animFrame = 0;
-        }
+        // Day run should always look like forward running; room keeps walk/idle behavior.
+        const inRunScene = gameState.currentState === STATE_DAY_RUN;
+        const shouldAnimate = inRunScene || this.isWalking;
+        const frameSpeed = inRunScene ? this.runAnimSpeed : this.animSpeed;
+
+        if (shouldAnimate) this.animFrame += frameSpeed;
+        else this.animFrame = 0;
     }
 
     // ─── MOVEMENT ────────────────────────────────────────────────────────────
@@ -110,16 +133,16 @@ class Player {
      * 4-directional movement for the bedroom scene, with collision detection via RoomScene.
      */
     handleRoomMovement() {
-        let s     = 8;
-        let oldX  = this.x;
-        let oldY  = this.y;
+        let s = 8;
+        let oldX = this.x;
+        let oldY = this.y;
         let moveX = 0;
         let moveY = 0;
 
-        if      (keyIsDown(87) || keyIsDown(UP_ARROW))    { moveY -= s; this.dir = 'north'; }
-        else if (keyIsDown(83) || keyIsDown(DOWN_ARROW))  { moveY += s; this.dir = 'south'; }
-        if      (keyIsDown(65) || keyIsDown(LEFT_ARROW))  { moveX -= s; this.dir = 'west';  }
-        else if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) { moveX += s; this.dir = 'east';  }
+        if (keyIsDown(87) || keyIsDown(UP_ARROW)) { moveY -= s; this.dir = 'north'; }
+        else if (keyIsDown(83) || keyIsDown(DOWN_ARROW)) { moveY += s; this.dir = 'south'; }
+        if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) { moveX -= s; this.dir = 'west'; }
+        else if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) { moveX += s; this.dir = 'east'; }
 
         this.isWalking = (moveX !== 0 || moveY !== 0);
 
@@ -141,11 +164,44 @@ class Player {
      * Horizontal-only movement for lane switching during the run scene.
      */
     handleRunMovement() {
-        let s = this.baseSpeed;
-        if (keyIsDown(65) || keyIsDown(LEFT_ARROW))  this.x -= s;
-        if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) this.x += s;
-        // Constrain to the 2-2-2 layout boundaries
+        const leftDown = keyIsDown(65) || keyIsDown(LEFT_ARROW);
+        const rightDown = keyIsDown(68) || keyIsDown(RIGHT_ARROW);
+
+        // Rising-edge input: one lane change per key press.
+        if (leftDown && !this.leftHeld) {
+            this.targetLaneIndex = max(0, this.targetLaneIndex - 1);
+            this.dir = 'west';
+        }
+        if (rightDown && !this.rightHeld) {
+            this.targetLaneIndex = min(this.runLaneCenters.length - 1, this.targetLaneIndex + 1);
+            this.dir = 'east';
+        }
+        this.leftHeld = leftDown;
+        this.rightHeld = rightDown;
+
+        // Non-linear magnetic snap to lane center (spring + damping).
+        const targetX = this.runLaneCenters[this.targetLaneIndex];
+        const distX = targetX - this.x;
+        this.laneVelocityX += distX * this.laneSpringK;
+        this.laneVelocityX *= this.laneSpringDamping;
+        this.x += this.laneVelocityX;
+
+        if (abs(distX) < 0.6 && abs(this.laneVelocityX) < 0.6) {
+            this.x = targetX;
+            this.laneVelocityX = 0;
+            this.currentLaneIndex = this.targetLaneIndex;
+        }
+
+        // Keep final position inside playable width.
         this.x = constrain(this.x, this.minX, this.maxX);
+
+        // Return to forward-running (back-facing) pose after lane switching settles.
+        if (!leftDown && !rightDown && abs(this.laneVelocityX) <= 0.2 && this.currentLaneIndex === this.targetLaneIndex) {
+            this.dir = 'north';
+        }
+
+        // Keep this true so run scene continuously plays movement frames.
+        this.isWalking = true;
     }
 
     // ─── RENDERING ───────────────────────────────────────────────────────────
@@ -160,7 +216,8 @@ class Player {
             imageMode(CENTER);
             let imgToDraw;
 
-            if (this.isWalking && animSet.walk.length > 0) {
+            const shouldUseWalkFrames = this.isWalking || gameState.currentState === STATE_DAY_RUN;
+            if (shouldUseWalkFrames && animSet.walk.length > 0) {
                 let index = floor(this.animFrame) % animSet.walk.length;
                 imgToDraw = animSet.walk[index];
             } else {
@@ -184,6 +241,8 @@ class Player {
         if (gameState.currentState === STATE_DAY_RUN) {
             this.drawTopBar();
         }
+
+
     }
 
     // ─── HUD ─────────────────────────────────────────────────────────────────
@@ -208,9 +267,9 @@ class Player {
      * Translates elapsed frames into a digital clock display starting at 08:30:00.
      */
     drawClock(x, y) {
-        let startSeconds  = 8.5 * 3600; // Fixed start time: 08:30:00
+        let startSeconds = 8.5 * 3600; // Fixed start time: 08:30:00
         let elapsedSeconds = this.playTimeFrames / 60;
-        let totalTime      = startSeconds + elapsedSeconds;
+        let totalTime = startSeconds + elapsedSeconds;
 
         let hh = Math.floor(totalTime / 3600);
         let mm = Math.floor((totalTime % 3600) / 60);
@@ -260,7 +319,7 @@ class Player {
         rect(x, y, 300, 24, 4);
 
         let total = DAYS_CONFIG[currentDayID].totalDistance;
-        let pct   = constrain(this.distanceRun / total, 0, 1);
+        let pct = constrain(this.distanceRun / total, 0, 1);
         fill(50, 150, 255);
         rect(x + 2, y + 2, (300 - 4) * pct, 20, 3);
     }
