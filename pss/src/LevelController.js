@@ -10,13 +10,12 @@ class LevelController {
     */
    constructor() {
       // Level Instance References
-      this.tutorialLevel = null;
       this.proceduralLevel = null;
       this.currentLevel = null;
 
       // Session tracking
       this.currentDayID = 1;
-      this.levelType = "TUTORIAL"; // TUTORIAL or NORMAL
+      this.levelType = "NORMAL"; // NORMAL level
 
       // Victory Phase Management
       this.levelPhase = "RUNNING"; // RUNNING, VICTORY_TRANSITION, or VICTORY_ZONE
@@ -41,12 +40,8 @@ class LevelController {
          return false;
       }
 
-      // Route to appropriate level type
-      if (levelConfig.type === "TUTORIAL") {
-         this.initializeTutorialLevel(dayID, levelConfig);
-      } else if (levelConfig.type === "NORMAL") {
-         this.initializeProceduralLevel(dayID, levelConfig);
-      }
+      // Initialize procedural level
+      this.initializeProceduralLevel(dayID, levelConfig);
 
       // Apply level-specific difficulty parameters to player
       this.applyDifficultyParameters(dayID);
@@ -84,23 +79,8 @@ class LevelController {
    }
 
    /**
-    * LEVEL ROUTING: TUTORIAL LEVEL
-    * Instantiate and initialize the TutorialLevel for Day 1.
-    */
-   initializeTutorialLevel(dayID, config) {
-      console.log(`[LevelController] → Loading Tutorial Level (Day ${dayID})`);
-
-      this.tutorialLevel = new TutorialLevel(dayID, config);
-      this.currentLevel = this.tutorialLevel;
-      this.levelType = "TUTORIAL";
-
-      // Initialize level with session data
-      this.tutorialLevel.setup();
-   }
-
-   /**
     * LEVEL ROUTING: PROCEDURAL LEVEL
-    * Instantiate and initialize the ProceduralLevel for Days 2-5.
+    * Instantiate and initialize the ProceduralLevel for all days.
     */
    initializeProceduralLevel(dayID, config) {
       console.log(`[LevelController] → Loading Procedural Level (Day ${dayID})`);
@@ -111,6 +91,15 @@ class LevelController {
 
       // Initialize level with session data
       this.proceduralLevel.setup();
+
+      // Set obstacle manager difficulty config
+      if (typeof obstacleManager !== 'undefined' && obstacleManager) {
+         const difficultyConfig = this.proceduralLevel.getDifficultyConfig();
+         console.log(`[LevelController] Setting level config for ObstacleManager:`, difficultyConfig);
+         obstacleManager.setLevelConfig(difficultyConfig);
+      } else {
+         console.warn(`[LevelController] obstacleManager is not defined!`);
+      }
    }
 
    /**
@@ -190,7 +179,7 @@ class LevelController {
 
    /**
     * QUERY: GET CURRENT LEVEL TYPE
-    * Returns the type of level currently active (TUTORIAL or NORMAL).
+    * Returns the type of level currently active (NORMAL).
     */
    getLevelType() {
       return this.levelType;
@@ -247,7 +236,7 @@ class LevelController {
             console.log(`[LevelController] 🎉 Victory Background Fully Visible! Entering settlement.`);
             this.levelPhase = "VICTORY_ZONE";
             this.victoryZoneFrames = 0;
-            // 记录胜利背景进入VICTORY_ZONE时的Y位置（此时应该是0，背景顶部对齐屏幕顶部）
+            // Record victory bg Y position when entering VICTORY_ZONE (should be 0, bg top aligned with screen top)
             this.victoryZoneStartY = scrolledSinceVictory - bgHeight;
             GLOBAL_CONFIG.scrollSpeed = 0;
          }

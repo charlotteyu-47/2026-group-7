@@ -10,20 +10,20 @@
  * true  → skips loading/splash, shows collision boxes and dev HUD.
  * false → normal game flow.
  */
-let developerMode = false;
+let developerMode = true;
 
 /**
  * Bypass day-lock checks in the level-select screen.
  * true  → all days are always selectable regardless of progress.
  * false → only unlocked days are selectable.
  */
-const DEBUG_UNLOCK_ALL = false;
+const DEBUG_UNLOCK_ALL = true;
 
 /**
  * Which scene to jump to immediately on startup (only active when developerMode = true).
  * Options: STATE_ROOM | STATE_DAY_RUN | STATE_MENU | STATE_LEVEL_SELECT
  */
-const DEBUG_START_STATE = STATE_INVENTORY;
+const DEBUG_START_STATE = STATE_DAY_RUN;
 
 /**
  * Player starting position used by setupRoomTestMode().
@@ -34,7 +34,7 @@ const DEBUG_PLAYER_Y = 550;
 /**
  * Day ID to load when jumping directly into a run (DEBUG_START_STATE = STATE_DAY_RUN).
  */
-const DEBUG_DAY_ID = 1;
+const DEBUG_DAY_ID = 2;
 
 
 // ─── RUNTIME TOGGLE ──────────────────────────────────────────────────────────
@@ -76,10 +76,16 @@ function setupRunTestMode() {
     console.log(`[DEV] Entering DAY_RUN directly (Day ${DEBUG_DAY_ID})`);
     if (player) player.applyLevelStats(DEBUG_DAY_ID);
     if (player) {
-        player.x = 500;
-        player.y = height / 2;
+        player.x = GLOBAL_CONFIG.lanes.lane1;
+        player.y = PLAYER_RUN_FOOT_Y;
     }
     if (obstacleManager) obstacleManager = new ObstacleManager();
+
+    // Initialize the level controller to load backgrounds and apply difficulty
+    if (levelController) {
+        levelController.initializeLevel(DEBUG_DAY_ID);
+    }
+
     gameState.currentState = STATE_DAY_RUN;
 }
 

@@ -23,8 +23,8 @@ let assets = {
     playerAnim: {
         north: [],
         south: [],
-        west:  [],
-        east:  []
+        west: [],
+        east: []
     }
 };
 let fonts = {};
@@ -55,20 +55,20 @@ let titleDrop = { y: -200, vy: 0, landed: false, shake: 0 };
 // ─── ITEM ENCYCLOPEDIA ───────────────────────────────────────────────────────
 const ITEM_WIKI = [
     // BUFFS (Help Page 2)
-    { name: 'COFFEE',      desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'coffee',                      type: 'BUFF'   },
-    { name: 'MOTORCYCLE',  desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'motorcycle',                  type: 'BUFF'   },
-    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 2, imgKey: 'coffee',                      type: 'BUFF'   },
-    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 3, imgKey: 'coffee',                      type: 'BUFF'   },
-    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 4, imgKey: 'coffee',                      type: 'BUFF'   },
-    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 5, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'coffee', type: 'BUFF' },
+    { name: 'MOTORCYCLE', desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'motorcycle', type: 'BUFF' },
+    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 2, imgKey: 'coffee', type: 'BUFF' },
+    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 3, imgKey: 'coffee', type: 'BUFF' },
+    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 4, imgKey: 'coffee', type: 'BUFF' },
+    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 5, imgKey: 'coffee', type: 'BUFF' },
 
     // HAZARDS (Help Page 3)
-    { name: 'HEAVY TRAFFIC',  desc: 'DANGER: INSTANT FAIL',         unlockDay: 1, imgKey: ['ambulance', 'bus'],       type: 'HAZARD' },
-    { name: 'LIGHT TRAFFIC',  desc: 'SPACE OBSTACLE: BLOCKS PATH.', unlockDay: 1, imgKey: ['car_brown', 'car_red'],   type: 'HAZARD' },
-    { name: 'HOMELESS',       desc: 'TRIPS PLAYER: SLOW DOWN',      unlockDay: 1, imgKey: 'homeless',                type: 'HAZARD' },
-    { name: 'PROMOTER',       desc: 'TRIPS PLAYER: SLOW DOWN',      unlockDay: 1, imgKey: 'promoter',                type: 'HAZARD' },
-    { name: 'SCOOTER RIDER',  desc: 'TRIPS PLAYER: SLOW DOWN',      unlockDay: 1, imgKey: 'scooter_rider',           type: 'HAZARD' },
-    { name: 'PADDLE',         desc: 'TRIPS PLAYER: SLOW DOWN',      unlockDay: 4, imgKey: 'scooter_rider',           type: 'HAZARD' }
+    { name: 'HEAVY TRAFFIC', desc: 'DANGER: INSTANT FAIL', unlockDay: 1, imgKey: ['ambulance', 'bus'], type: 'HAZARD' },
+    { name: 'LIGHT TRAFFIC', desc: 'SPACE OBSTACLE: BLOCKS PATH.', unlockDay: 1, imgKey: ['car_brown', 'car_red'], type: 'HAZARD' },
+    { name: 'HOMELESS', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 1, imgKey: 'homeless', type: 'HAZARD' },
+    { name: 'PROMOTER', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 1, imgKey: 'promoter', type: 'HAZARD' },
+    { name: 'SCOOTER RIDER', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 1, imgKey: 'scooter_rider', type: 'HAZARD' },
+    { name: 'PADDLE', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 4, imgKey: 'scooter_rider', type: 'HAZARD' }
 ];
 
 // ─── ASSET LOADING TRACKER ───────────────────────────────────────────────────
@@ -97,16 +97,16 @@ function itemLoaded() {
  */
 function preload() {
     // Visual assets
-    assets.menuBg      = loadImage('assets/cbg.png', itemLoaded);
-    assets.otherBg     = loadImage('assets/other_bg.png', itemLoaded);
-    assets.roomBg      = loadImage('assets/room.png', itemLoaded);
-    assets.inventoryBg    = loadImage('assets/inventory/table.png',        itemLoaded);
-    assets.backpackImg    = loadImage('assets/inventory/backpack.png',      itemLoaded);
-    assets.studentCardImg = loadImage('assets/inventory/student_card.png',  itemLoaded);
-    assets.computerImg    = loadImage('assets/inventory/computer.png',      itemLoaded);
+    assets.menuBg = loadImage('assets/cbg.png', itemLoaded);
+    assets.otherBg = loadImage('assets/other_bg.png', itemLoaded);
+    assets.roomBg = loadImage('assets/room.png', itemLoaded);
+    assets.inventoryBg = loadImage('assets/inventory/table.png', itemLoaded);
+    assets.backpackImg = loadImage('assets/inventory/backpack.png', itemLoaded);
+    assets.studentCardImg = loadImage('assets/inventory/student_card.png', itemLoaded);
+    assets.computerImg = loadImage('assets/inventory/computer.png', itemLoaded);
 
     assets.selectBg.unlock = loadImage('assets/select_background/day_unlock.jpg', itemLoaded);
-    assets.selectBg.lock   = loadImage('assets/select_background/day_lock.jpg', itemLoaded);
+    assets.selectBg.lock = loadImage('assets/select_background/day_lock.jpg', itemLoaded);
 
     for (let i = 1; i <= 5; i++) {
         assets.selectClouds.push(loadImage(`assets/select_cloud/Cloud-${i}.png`, itemLoaded));
@@ -114,29 +114,29 @@ function preload() {
 
     // Typography
     fonts.title = loadFont('assets/fonts/PressStart2P-Regular.ttf', itemLoaded);
-    fonts.time  = loadFont('assets/fonts/VT323-Regular.ttf', itemLoaded);
-    fonts.body  = loadFont('assets/fonts/DotGothic16-Regular.ttf', itemLoaded);
-    fonts.logo  = loadFont('assets/fonts/title_1.otf', itemLoaded);
+    fonts.time = loadFont('assets/fonts/VT323-Regular.ttf', itemLoaded);
+    fonts.body = loadFont('assets/fonts/DotGothic16-Regular.ttf', itemLoaded);
+    fonts.logo = loadFont('assets/fonts/title_1.otf', itemLoaded);
 
     // Audio
     soundFormats('mp3', 'wav');
-    bgm       = loadSound('assets/audio/music/MainTheme.mp3', itemLoaded);
+    bgm = loadSound('assets/audio/music/MainTheme.mp3', itemLoaded);
     sfxSelect = loadSound('assets/audio/effects/Select.wav', itemLoaded);
-    sfxClick  = loadSound('assets/audio/effects/Click.wav', itemLoaded);
+    sfxClick = loadSound('assets/audio/effects/Click.wav', itemLoaded);
 
     // Control key sprites
-    assets.keys.w     = loadImage('assets/control_keys/W.png', itemLoaded);
-    assets.keys.a     = loadImage('assets/control_keys/A.png', itemLoaded);
-    assets.keys.s     = loadImage('assets/control_keys/S.png', itemLoaded);
-    assets.keys.d     = loadImage('assets/control_keys/D.png', itemLoaded);
-    assets.keys.up    = loadImage('assets/control_keys/ARROWUP.png', itemLoaded);
-    assets.keys.down  = loadImage('assets/control_keys/ARROWDOWN.png', itemLoaded);
-    assets.keys.left  = loadImage('assets/control_keys/ARROWLEFT.png', itemLoaded);
+    assets.keys.w = loadImage('assets/control_keys/W.png', itemLoaded);
+    assets.keys.a = loadImage('assets/control_keys/A.png', itemLoaded);
+    assets.keys.s = loadImage('assets/control_keys/S.png', itemLoaded);
+    assets.keys.d = loadImage('assets/control_keys/D.png', itemLoaded);
+    assets.keys.up = loadImage('assets/control_keys/ARROWUP.png', itemLoaded);
+    assets.keys.down = loadImage('assets/control_keys/ARROWDOWN.png', itemLoaded);
+    assets.keys.left = loadImage('assets/control_keys/ARROWLEFT.png', itemLoaded);
     assets.keys.right = loadImage('assets/control_keys/ARROWRIGHT.png', itemLoaded);
     assets.keys.enter = loadImage('assets/control_keys/ENTER.png', itemLoaded);
     assets.keys.space = loadImage('assets/control_keys/SPACE.png', itemLoaded);
-    assets.keys.e     = loadImage('assets/control_keys/E.png', itemLoaded);
-    assets.keys.p     = loadImage('assets/control_keys/P.png', itemLoaded);
+    assets.keys.e = loadImage('assets/control_keys/E.png', itemLoaded);
+    assets.keys.p = loadImage('assets/control_keys/P.png', itemLoaded);
 
     // Logo frames
     assets.logoImgs = [
@@ -151,31 +151,43 @@ function preload() {
 
     // Entity preview sprites (no progress tracking — non-critical)
     if (!assets.previews) assets.previews = {};
-    assets.previews['player']        = loadImage('assets/characters/wiki/Iris.png');
-    assets.previews['npc_1']         = loadImage('assets/characters/wiki/Wiola.png');
-    assets.previews['ambulance']     = loadImage('assets/obstacles/ambulance.png');
-    assets.previews['bus']           = loadImage('assets/obstacles/bus.png');
-    assets.previews['car_brown']     = loadImage('assets/obstacles/car_brown.png');
-    assets.previews['car_red']       = loadImage('assets/obstacles/car_red.png');
-    assets.previews['homeless']      = loadImage('assets/obstacles/homeless.png');
-    assets.previews['promoter']      = loadImage('assets/obstacles/promoter.png');
-    assets.previews['scooter_rider'] = loadImage('assets/obstacles/scooter_rider.png');
-    assets.previews['coffee']        = loadImage('assets/power_up/coffee.png');
-    assets.previews['motorcycle']    = loadImage('assets/power_up/motorcycle.png');
+    assets.previews['player'] = loadImage('assets/characters/wiki/Iris.png');
+    assets.previews['npc_1'] = loadImage('assets/characters/wiki/Wiola.png');
+    assets.previews['ambulance'] = loadImage('assets/obstacles/obstacle_ambulance.png');
+    assets.previews['bus'] = loadImage('assets/obstacles/obstacle_bus.png');
+    assets.previews['car_brown'] = loadImage('assets/obstacles/obstacle_car_brown.png');
+    assets.previews['car_red'] = loadImage('assets/obstacles/obstacle_car_red.png');
+    assets.previews['homeless'] = loadImage('assets/obstacles/obstacle_homeless.png');
+    assets.previews['promoter'] = loadImage('assets/obstacles/obstacle_promoter.png');
+    assets.previews['scooter_rider'] = loadImage('assets/obstacles/obstacle_scooter.png');
+    assets.previews['coffee'] = loadImage('assets/power_up/powerup_coffee.png');
+    assets.previews['motorcycle'] = loadImage('assets/power_up/powerup_motorcycle.png');
 
-    // Player directional animation spritesheets
+    // Player directional frame animation (uses authored frame PNGs directly)
     assets.playerAnim = {};
     const dirs = ['north', 'south', 'west', 'east'];
+    const frameFilesByDir = {
+        north: ['frame_1.png', 'frame_2.png', 'frame_3.png', 'frame_4.png', 'frame_5.png'],
+        south: ['frame_1.png', 'frame_2.png', 'frame_3.png', 'frame_4.png', 'frame_5.png'],
+        west: ['frame_001.png', 'frame_002.png', 'frame_003.png', 'frame_004.png', 'frame_005.png'],
+        east: ['frame_001.png', 'frame_002.png', 'frame_003.png', 'frame_004.png', 'frame_005.png']
+    };
+
     dirs.forEach(d => {
         assets.playerAnim[d] = { walk: [], idle: null };
-        assets.playerAnim[d].idle = loadImage(`assets/characters/spritesheet/${d}.png`);
-        loadImage(`assets/characters/spritesheet/spritesheet_${d}.png`, (img) => {
-            let fw = img.width / 5;
-            let fh = img.height;
-            for (let i = 0; i < 5; i++) {
-                assets.playerAnim[d].walk.push(img.get(i * fw, 0, fw, fh));
-            }
+
+        frameFilesByDir[d].forEach((fileName) => {
+            const path = `assets/characters/sprite_frames/${d}/${fileName}`;
+            const frameImg = loadImage(path);
+            assets.playerAnim[d].walk.push(frameImg);
         });
+
+        // Keep dedicated idle if present; fallback to first run frame.
+        assets.playerAnim[d].idle = loadImage(
+            `assets/characters/spritesheet/${d}.png`,
+            () => { },
+            () => { assets.playerAnim[d].idle = assets.playerAnim[d].walk[0]; }
+        );
     });
 }
 
@@ -192,14 +204,14 @@ function setup() {
     cvs.parent('canvas-container');
     noSmooth();
 
-    gameState       = new GameState();
-    mainMenu        = new MainMenu();
-    roomScene       = new RoomScene();
-    inventory       = new InventorySystem();
-    env             = new Environment();
-    player          = new Player();
+    gameState = new GameState();
+    mainMenu = new MainMenu();
+    roomScene = new RoomScene();
+    inventory = new InventorySystem();
+    env = new Environment();
+    player = new Player();
     obstacleManager = new ObstacleManager();
-    backpackUI      = new BackpackVisual(inventory, roomScene);
+    backpackUI = new BackpackVisual(inventory, roomScene);
     levelController = new LevelController();
 
     textFont(fonts.body);
@@ -281,9 +293,10 @@ function draw() {
  */
 function runGameLoop() {
     if (levelController) { levelController.update(); }
-    if (env)             { env.update(GLOBAL_CONFIG.scrollSpeed); env.display(); }
-    if (obstacleManager) { obstacleManager.update(GLOBAL_CONFIG.scrollSpeed, player); obstacleManager.display(); }
-    if (player)          { player.update(); player.display(); }
+    if (env) { env.update(GLOBAL_CONFIG.scrollSpeed); env.display(); }
+    const levelPhase = levelController ? levelController.getLevelPhase() : "RUNNING";
+    if (obstacleManager) { obstacleManager.update(GLOBAL_CONFIG.scrollSpeed, player, levelPhase); obstacleManager.display(); }
+    if (player) { player.update(); player.display(); }
     if (levelController) { levelController.display(); }
 
     // Win condition: settlement point reached
@@ -320,8 +333,8 @@ function playSFX(sound) {
 function triggerTransition(onBlackout) {
     if (globalFade.isFading) return;
     globalFade.isFading = true;
-    globalFade.dir      = 1;
-    globalFade.alpha    = 0;
+    globalFade.dir = 1;
+    globalFade.alpha = 0;
     globalFade.callback = onBlackout;
 }
 
@@ -340,7 +353,7 @@ function renderGlobalFade() {
         globalFade.dir = -1;
     }
     if (globalFade.dir === -1 && globalFade.alpha <= 0) {
-        globalFade.alpha    = 0;
+        globalFade.alpha = 0;
         globalFade.isFading = false;
         globalFade.callback = null;
     }
@@ -431,16 +444,16 @@ function handlePauseSelection() {
         togglePause();
         pauseFromState = null;
     } else if (PAUSE_OPTIONS[pauseIndex] === "HELP") {
-        pauseFromState         = gameState.previousState;
+        pauseFromState = gameState.previousState;
         playSFX(sfxClick);
         gameState.currentState = STATE_HELP;
-        mainMenu.menuState     = STATE_HELP;
-        mainMenu.helpPage      = 0;
+        mainMenu.menuState = STATE_HELP;
+        mainMenu.helpPage = 0;
     } else if (PAUSE_OPTIONS[pauseIndex] === "QUIT TO MENU") {
         triggerTransition(() => {
             gameState.setState(STATE_MENU);
             mainMenu.menuState = STATE_MENU;
-            pauseFromState     = null;
+            pauseFromState = null;
         });
     }
 }
@@ -449,7 +462,7 @@ function handlePauseSelection() {
  * Dispatches mouse press events; also unlocks the Web Audio context on first click.
  */
 function mousePressed() {
-    if (globalFade.isFading) return;
+    if (globalFade.isFading || !gameState) return;
     let state = gameState.currentState;
 
     // Splash screen: unlock audio and transition to main menu
@@ -485,6 +498,7 @@ function mousePressed() {
  * Dispatches mouse release events to the active UI systems.
  */
 function mouseReleased() {
+    if (!gameState) return;
     if (mainMenu) mainMenu.handleRelease();
     if (gameState.currentState === STATE_INVENTORY) {
         if (backpackUI) backpackUI.handleMouseReleased(mouseX, mouseY);
@@ -495,6 +509,7 @@ function mouseReleased() {
  * Dispatches mouse drag events to the active UI systems.
  */
 function mouseDragged() {
+    if (!gameState) return;
     if (gameState.currentState === STATE_INVENTORY) {
         if (backpackUI) backpackUI.handleMouseDragged(mouseX, mouseY);
     }
@@ -504,6 +519,7 @@ function mouseDragged() {
  * Dispatches mouse move events to the active UI systems.
  */
 function mouseMoved() {
+    if (!gameState) return;
     if (gameState.currentState === STATE_INVENTORY) {
         if (backpackUI) backpackUI.handleMouseMoved(mouseX, mouseY);
     }
@@ -528,8 +544,8 @@ function togglePause() {
 function setupRun(dayID) {
     currentDayID = dayID;
     player.applyLevelStats(dayID);
-    player.x = 500;
-    player.y = height / 2;
+    player.x = GLOBAL_CONFIG.lanes.lane1;
+    player.y = PLAYER_RUN_FOOT_Y;  // Player foot anchor for day run
     roomScene.reset();
     obstacleManager = new ObstacleManager();
     levelController.initializeLevel(dayID);
@@ -553,8 +569,8 @@ function drawLoadingScreen() {
     if (assets.uobLogo) {
         push();
         imageMode(CENTER);
-        let wave       = sin(frameCount * 0.05);
-        let imgScale   = 1.0 + wave * 0.05;
+        let wave = sin(frameCount * 0.05);
+        let imgScale = 1.0 + wave * 0.05;
         let alphaValue = 180 + wave * 75;
         tint(255, alphaValue);
         image(assets.uobLogo, cx, cy - 80, 120 * imgScale, 120 * imgScale);
@@ -586,7 +602,7 @@ function drawLoadingScreen() {
  */
 function drawLoadingProgressBar(x, y, progress) {
     let totalSegments = 10;
-    let gap    = 8;
+    let gap = 8;
     let blockW = 24;
     let blockH = 16;
     let totalW = (blockW * totalSegments) + (gap * (totalSegments - 1));
@@ -600,8 +616,8 @@ function drawLoadingProgressBar(x, y, progress) {
 
     rectMode(CORNER);
     for (let i = 0; i < totalSegments; i++) {
-        let bx        = (x - totalW / 2) + i * (blockW + gap);
-        let by        = y - blockH / 2;
+        let bx = (x - totalW / 2) + i * (blockW + gap);
+        let by = y - blockH / 2;
         let threshold = (i + 1) / totalSegments;
 
         if (progress >= threshold) {
@@ -651,17 +667,17 @@ function drawSplashScreen() {
  */
 function drawLogoPlaceholder(x, y) {
     let isSplash = (gameState.currentState === STATE_SPLASH);
-    let t        = frameCount * 0.02;
-    let targetY  = isSplash ? (y + 160) : (y + 10);
+    let t = frameCount * 0.02;
+    let targetY = isSplash ? (y + 160) : (y + 10);
 
     // Drop-in physics
     if (!titleDrop.landed) {
         titleDrop.vy += 1.2;
-        titleDrop.y  += titleDrop.vy;
+        titleDrop.y += titleDrop.vy;
         if (titleDrop.y >= y + 160) {
-            titleDrop.y      = y + 160;
+            titleDrop.y = y + 160;
             titleDrop.landed = true;
-            titleDrop.shake  = 6;
+            titleDrop.shake = 6;
         }
     } else {
         titleDrop.y = lerp(titleDrop.y, targetY, 0.15);
@@ -681,9 +697,9 @@ function drawLogoPlaceholder(x, y) {
         push();
         imageMode(CENTER);
         tint(255, 255, 255, 200);
-        image(assets.selectClouds[1], width * 0.1,  height * 0.9  + cos(t) * 10,  800, 480);
-        image(assets.selectClouds[2], width * 0.1,  height * 0.2  + sin(t) * 10,  700, 420);
-        image(assets.selectClouds[4], width * 1.0,  height * 0.09 + sin(t) * 10,  700, 420);
+        image(assets.selectClouds[1], width * 0.1, height * 0.9 + cos(t) * 10, 800, 480);
+        image(assets.selectClouds[2], width * 0.1, height * 0.2 + sin(t) * 10, 700, 420);
+        image(assets.selectClouds[4], width * 1.0, height * 0.09 + sin(t) * 10, 700, 420);
         pop();
     }
 
@@ -830,12 +846,10 @@ function drawEndScreen() {
     textFont(fonts.body);
     fill(255);
     textSize(24);
-    let msg = (gameState.failReason === "HIT_BUS")   ? "You were hit by a speeding bus." :
-              (gameState.failReason === "EXHAUSTED") ? "You ran out of energy."          :
-              (gameState.failReason === "LATE")      ? "You are fired!"                  : "Game Over.";
+    let msg = (gameState.failReason === "HIT_BUS") ? "You were hit by a speeding bus." :
+        (gameState.failReason === "EXHAUSTED") ? "You ran out of energy." :
+            (gameState.failReason === "LATE") ? "You are fired!" : "Game Over.";
     text(msg, width / 2, height / 2 + 20);
     textSize(18);
     text("Press ENTER to return to Room", width / 2, height / 2 + 100);
 }
-
-

@@ -3,18 +3,18 @@
 
 // ─── ENGINE STATE CONSTANTS ───────────────────────────────────────────────────
 // Integer mapping for the Finite State Machine (FSM) transitions.
-const STATE_MENU         = 0;
+const STATE_MENU = 0;
 const STATE_LEVEL_SELECT = 1;
-const STATE_SETTINGS     = 2;
-const STATE_ROOM         = 3;
-const STATE_PAUSED       = 4;
-const STATE_DAY_RUN      = 5;
-const STATE_FAIL         = 6;
-const STATE_WIN          = 7;
-const STATE_LOADING      = 8;
-const STATE_SPLASH       = 9;
-const STATE_HELP         = 10;
-const STATE_INVENTORY    = 11;
+const STATE_SETTINGS = 2;
+const STATE_ROOM = 3;
+const STATE_PAUSED = 4;
+const STATE_DAY_RUN = 5;
+const STATE_FAIL = 6;
+const STATE_WIN = 7;
+const STATE_LOADING = 8;
+const STATE_SPLASH = 9;
+const STATE_HELP = 10;
+const STATE_INVENTORY = 11;
 
 /**
  * Core canvas resolution, world-space boundaries, and scroll physics.
@@ -28,9 +28,9 @@ const GLOBAL_CONFIG = {
     // THE 2-2-2 LAYOUT INFRASTRUCTURE
     // Strict coordinate boundaries for scenery, sidewalks, and the road network.
     layout: {
-        leftSceneryEnd:   500,  // Right edge of left scenery zone
-        leftSidewalkEnd:  700,  // Right edge of left sidewalk
-        rightLaneEnd:     1220, // Right edge of the road (all four lanes)
+        leftSceneryEnd: 500,  // Right edge of left scenery zone
+        leftSidewalkEnd: 700,  // Right edge of left sidewalk
+        rightLaneEnd: 1220, // Right edge of the road (all four lanes)
         rightSidewalkEnd: 1420  // Right edge of right sidewalk
     },
 
@@ -44,13 +44,16 @@ const GLOBAL_CONFIG = {
     }
 };
 
+// Player foot anchor for DAY_RUN scene. Keep this near bottom of the screen.
+const PLAYER_RUN_FOOT_Y = GLOBAL_CONFIG.resolutionH - 140;
+
 /**
  * Default player attributes applied at the start of every session.
  */
 const PLAYER_DEFAULTS = {
-    baseHealth:  100,
+    baseHealth: 100,
     healthDecay: 0.05, // Stamina depletion per frame during a run
-    baseSpeed:   10
+    baseSpeed: 10
 };
 
 /**
@@ -58,22 +61,22 @@ const PLAYER_DEFAULTS = {
  */
 const DAYS_CONFIG = {
     1: {
-        description: "Tutorial - Learn the Basics",
-        totalDistance: 3000,
-        realTimeLimit: 180, // 3 minutes for tutorial
-        obstacleSpawnInterval: 90,
+        description: "Day 1 - Learn the Basics",
+        totalDistance: 1000,
+        realTimeLimit: 120,
+        obstacleSpawnInterval: 60,
         baseScrollSpeed: 8,
         basePlayerSpeed: 10,
         healthDecay: 0.03,
-        type: "TUTORIAL"
+        type: "NORMAL"
     },
     2: {
         description: "Day 2 - Running Late",
-        totalDistance: 200,
+        totalDistance: 1000,
         realTimeLimit: 90,
         obstacleSpawnInterval: 45,
-        baseScrollSpeed: 10,
-        basePlayerSpeed: 10,
+        baseScrollSpeed: 19,
+        basePlayerSpeed: 15,
         healthDecay: 0.05,
         type: "NORMAL"
     },
