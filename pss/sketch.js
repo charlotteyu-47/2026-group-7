@@ -1,174 +1,255 @@
-// [Role: Core Systems Developer]
-// Project: Park Street Survivor - Main Application Controller
-// Responsibilities: Global state management, hardware input routing, and game loop synchronization.
+// Park Street Survivor - Main Application Controller
+// Responsibilities: Global state management, hardware input routing, and game loop orchestration.
 
-// Global System Instances
-let gameState, mainMenu, roomScene, inventory, env, player, obstacleManager;
-let currentUnlockedDay = 1; 
+// ─── GLOBAL SYSTEM INSTANCES ─────────────────────────────────────────────────
+let gameState, mainMenu, roomScene, inventory, env, player, obstacleManager, levelController;
+let backpackUI;
+let endScreenManager;
+
+// ─── GAME PROGRESS STATE ─────────────────────────────────────────────────────
+let currentUnlockedDay = 1;
 let currentDayID = 1;
+
+// ─── ASSET REGISTRY ──────────────────────────────────────────────────────────
 let assets = {
-    menuBg: null,      
-    keys: {},        
+    menuBg: null,
+    otherBg: null,
+    keys: {},
     selectClouds: [],
-    selectBg: {  
+    selectBg: {
         unlock: null,
         lock: null
     },
-    previews: []
-}; 
-let fonts = {}; 
+    previews: [],
+    playerAnim: {
+        north: [],
+        south: [],
+        west:  [],
+        east:  []
+    }
+};
+let fonts = {};
 let bgm, sfxSelect, sfxClick;
 
-// Audio Engine Configuration
+// ─── AUDIO VOLUME CONTROLS ───────────────────────────────────────────────────
 let masterVolumeBGM = 0.25;
 let masterVolumeSFX = 0.7;
 
-// GLOBAL TRANSITION CONTROLLER: 0.3s Fade-in/Fade-out Engine
+// ─── DIFFICULTY SETTING ──────────────────────────────────────────────────────
+// 0 = EASY (locked), 1 = NORMAL (default), 2 = HARD (locked)
+let gameDifficulty = 1;
+const DIFFICULTY_LABELS = ["EASY", "NORMAL", "HARD"];
+
+// ─── GLOBAL FADE TRANSITION CONTROLLER ───────────────────────────────────────
+// Drives a 0.3s fade-in / fade-out overlay across all scene transitions.
 let globalFade = {
     alpha: 0,
-    speed: 255 / (0.3 * 60), 
+    speed: 255 / (0.3 * 60),
     isFading: false,
-    dir: 1, 
-    callback: null 
+    dir: 1,
+    callback: null
 };
 
+// ─── PAUSE MENU STATE ─────────────────────────────────────────────────────────
+let pauseIndex = -1;  // -1 = no selection (nothing highlighted by default)
+let pauseFromState = null;
+
+// Pause options vary by context (room vs day-run)
+function getPauseOptions() {
+    if (gameState && gameState.previousState === STATE_DAY_RUN) {
+        return ["RESTART","SETTINGS", "STORY", "HELP", "EXIT"];
+    }
+    return ["SETTINGS", "STORY", "HELP", "EXIT"];
+}
+
+// Restart sub-menu state
+let showRestartChoice = false;
+let restartChoiceIndex = 0;
+const RESTART_OPTIONS = ["BACK TO ROOM", "RESTART RUN"];
+
+// Pause button breathing scale (smooth lerp)
+let pauseBtnScale = 1.0;
+
+// Story recap state
+let showStoryRecap = false;
+let storyRecapDay = 1;
+let storyScrollOffset = 0;  // scroll offset within current day's text
+
+// ─── SPLASH LOGO ANIMATION STATE ─────────────────────────────────────────────
+let titleDrop = { y: -200, vy: 0, landed: false, shake: 0 };
+
+// ─── ITEM ENCYCLOPEDIA ───────────────────────────────────────────────────────
 const ITEM_WIKI = [
-    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 1, icon: '☕', type: 'BUFF' },
-    { name: 'DASH DRINK', desc: 'SPEED BOOST FOR 3S', unlockDay: 3, icon: '⚡', type: 'BUFF' },
-    { name: 'YELLOW BUS', desc: 'DANGER: INSTANT FAIL', unlockDay: 1, icon: '🚌', type: 'HAZARD' },
-    { name: 'STRAY TRASH', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 2, icon: '🗑️', type: 'HAZARD' }
+    // BUFFS (Help Page 2)
+    { name: 'COFFEE',      desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'MOTORCYCLE',  desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'motorcycle',                  type: 'BUFF'   },
+    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 2, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 3, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 4, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 5, imgKey: 'coffee',                      type: 'BUFF'   },
+
+    // HAZARDS (Help Page 3)
+    { name: 'HEAVY TRAFFIC',  desc: 'Immediately fail upon collision.',           unlockDay: 1, imgKey: ['ambulance', 'bus'],       type: 'HAZARD' },
+    { name: 'LIGHT TRAFFIC',  desc: 'Causes player to lose health.',              unlockDay: 1, imgKey: ['car_brown', 'car_red'],   type: 'HAZARD' },
+    { name: 'HOMELESS',       desc: 'Forces immediate lane change.',              unlockDay: 1, imgKey: 'homeless',                type: 'HAZARD' },
+    { name: 'PROMOTER',       desc: 'A flyer that blocks the Iris\'s view.',      unlockDay: 1, imgKey: 'promoter',                type: 'HAZARD' },
+    { name: 'SCOOTER RIDER',  desc: 'Causes temporary stun.',                     unlockDay: 1, imgKey: 'scooter_rider',           type: 'HAZARD' },
+    { name: 'PADDLE',         desc: '...',                                        unlockDay: 4, imgKey: 'scooter_rider',           type: 'HAZARD' }
 ];
 
+// ─── ASSET LOADING TRACKER ───────────────────────────────────────────────────
 let isLoaded = false;
 let loadProgress = 0;
-const totalAssets = 24;
+let smoothProgress = 0;
+let assetsLoadedCount = 0;
+const totalAssetsToLoad = 36;
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: ASSET LOADING
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * ASSET PRELOADING
- * Synchronous loading of high-priority assets to ensure availability before setup().
+ * Increments the loaded-asset counter and updates the progress ratio.
  */
-function preload() {
-    // Visual Assets: Backgrounds and Sprites
-    assets.menuBg = loadImage('assets/cbg.png');
-
-    assets.selectBg.unlock = loadImage('assets/select_background/day_unlock.jpg');
-    assets.selectBg.lock = loadImage('assets/select_background/day_lock.jpg');
-
-    for (let i = 1; i <= 5; i++) {
-        assets.selectClouds.push(loadImage(`assets/select_cloud/Cloud-${i}.png`));
-    }
-    
-    // Typography: Font mapping for specific UI roles
-    fonts.title = loadFont('assets/fonts/PressStart2P-Regular.ttf'); 
-    fonts.time = loadFont('assets/fonts/VT323-Regular.ttf');        
-    fonts.body = loadFont('assets/fonts/DotGothic16-Regular.ttf');  
-
-    // Audio Assets: Music and Sound Effects
-    soundFormats('mp3', 'wav');
-    bgm = loadSound('assets/audio/music/MainTheme.mp3');
-    sfxSelect = loadSound('assets/audio/effects/Select.wav');
-    sfxClick = loadSound('assets/audio/effects/Click.wav');
-
-    // Help Assets: Control Keys
-    if (!assets.keys) assets.keys = {};
-
-    assets.keys.w = loadImage('assets/control_keys/W.png');
-    assets.keys.a = loadImage('assets/control_keys/A.png');
-    assets.keys.s = loadImage('assets/control_keys/S.png');
-    assets.keys.d = loadImage('assets/control_keys/D.png');
-
-    assets.keys.up    = loadImage('assets/control_keys/ARROWUP.png');
-    assets.keys.down  = loadImage('assets/control_keys/ARROWDOWN.png');
-    assets.keys.left  = loadImage('assets/control_keys/ARROWLEFT.png');
-    assets.keys.right = loadImage('assets/control_keys/ARROWRIGHT.png');
-
-    assets.keys.enter = loadImage('assets/control_keys/ENTER.png');
-    assets.keys.space = loadImage('assets/control_keys/SPACE.png');
-    assets.keys.e     = loadImage('assets/control_keys/E.png');
-    assets.keys.p     = loadImage('assets/control_keys/P.png');
-
+function itemLoaded() {
+    assetsLoadedCount++;
+    loadProgress = assetsLoadedCount / totalAssetsToLoad;
 }
 
 /**
- * ENGINE INITIALISATION
- * Bootstraps the p5.js canvas and instantiates all core system modules.
+ * p5.js lifecycle hook: loads all assets before setup() runs.
+ * Each callback calls itemLoaded() to track real-time progress.
+ */
+function preload() {
+    // Visual assets
+    assets.menuBg      = loadImage('assets/cbg.png', itemLoaded);
+    assets.otherBg     = loadImage('assets/other_bg.png', itemLoaded);
+    assets.libraryBg   = loadImage('assets/background/library.jpg', itemLoaded);
+    assets.bbg         = loadImage('assets/bbg.png', itemLoaded);
+    assets.roomBg      = loadImage('assets/room.png', itemLoaded);
+    assets.inventoryBg    = loadImage('assets/inventory/table.png', itemLoaded);
+    assets.backpackImg    = loadImage('assets/inventory/backpack.png', itemLoaded);
+    assets.studentCardImg = loadImage('assets/inventory/student_card.png', itemLoaded);
+    assets.computerImg    = loadImage('assets/inventory/computer.png', itemLoaded);
+
+    assets.selectBg.unlock = loadImage('assets/select_background/day_unlock.jpg', itemLoaded);
+    assets.selectBg.lock   = loadImage('assets/select_background/day_lock.jpg', itemLoaded);
+
+    // Story recap assets
+    assets.storyShape = loadImage('assets/story/frame_shape.png', itemLoaded);
+    assets.storyCloud = loadImage('assets/story/frame_cloud.png', itemLoaded);
+
+
+    for (let i = 1; i <= 5; i++) {
+        assets.selectClouds.push(loadImage(`assets/select_cloud/Cloud-${i}.png`, itemLoaded));
+    }
+
+    // Typography
+    fonts.title = loadFont('assets/fonts/PressStart2P-Regular.ttf', itemLoaded);
+    fonts.time  = loadFont('assets/fonts/VT323-Regular.ttf', itemLoaded);
+    fonts.body  = loadFont('assets/fonts/DotGothic16-Regular.ttf', itemLoaded);
+    fonts.logo  = loadFont('assets/fonts/title_1.otf', itemLoaded);
+
+    // Audio
+    soundFormats('mp3', 'wav');
+    bgm       = loadSound('assets/audio/music/MainTheme.mp3', itemLoaded);
+    sfxSelect = loadSound('assets/audio/effects/Select.wav', itemLoaded);
+    sfxClick  = loadSound('assets/audio/effects/Click.wav', itemLoaded);
+
+    // Control key sprites
+    assets.keys.w     = loadImage('assets/control_keys/W.png', itemLoaded);
+    assets.keys.a     = loadImage('assets/control_keys/A.png', itemLoaded);
+    assets.keys.s     = loadImage('assets/control_keys/S.png', itemLoaded);
+    assets.keys.d     = loadImage('assets/control_keys/D.png', itemLoaded);
+    assets.keys.up    = loadImage('assets/control_keys/ARROWUP.png', itemLoaded);
+    assets.keys.down  = loadImage('assets/control_keys/ARROWDOWN.png', itemLoaded);
+    assets.keys.left  = loadImage('assets/control_keys/ARROWLEFT.png', itemLoaded);
+    assets.keys.right = loadImage('assets/control_keys/ARROWRIGHT.png', itemLoaded);
+    assets.keys.enter = loadImage('assets/control_keys/ENTER.png', itemLoaded);
+    assets.keys.space = loadImage('assets/control_keys/SPACE.png', itemLoaded);
+    assets.keys.e     = loadImage('assets/control_keys/E.png', itemLoaded);
+    assets.keys.p     = loadImage('assets/control_keys/P.png', itemLoaded);
+
+    // Logo frames
+    assets.logoImgs = [
+        loadImage('assets/logo/logo_1.png', itemLoaded),
+        loadImage('assets/logo/logo_2.png', itemLoaded),
+        loadImage('assets/logo/logo_3.png', itemLoaded),
+        loadImage('assets/logo/logo_4.png', itemLoaded),
+        loadImage('assets/logo/logo_5.png', itemLoaded)
+    ];
+
+    assets.uobLogo = loadImage('assets/logo/uob_logo.png', itemLoaded);
+
+    // UI button sprites
+    assets.btnImg   = loadImage('assets/buttons/button.png', itemLoaded);
+    assets.backImg  = loadImage('assets/buttons/back.png', itemLoaded);
+    assets.pauseImg = loadImage('assets/buttons/pause.png', itemLoaded);
+
+    // Entity preview sprites (no progress tracking — non-critical)
+    if (!assets.previews) assets.previews = {};
+    assets.previews['player']        = loadImage('assets/characters/wiki/Iris.png');
+    assets.previews['npc_1']         = loadImage('assets/characters/wiki/Wiola.png');
+    assets.previews['ambulance']     = loadImage('assets/obstacles/ambulance.png');
+    assets.previews['bus']           = loadImage('assets/obstacles/bus.png');
+    assets.previews['car_brown']     = loadImage('assets/obstacles/car_brown.png');
+    assets.previews['car_red']       = loadImage('assets/obstacles/car_red.png');
+    assets.previews['homeless']      = loadImage('assets/obstacles/homeless.png');
+    assets.previews['promoter']      = loadImage('assets/obstacles/promoter.png');
+    assets.previews['scooter_rider'] = loadImage('assets/obstacles/scooter_rider.png');
+    assets.previews['coffee']        = loadImage('assets/power_up/coffee.png');
+    assets.previews['motorcycle']    = loadImage('assets/power_up/motorcycle.png');
+
+    // Player directional animation spritesheets
+    assets.playerAnim = {};
+    const dirs = ['north', 'south', 'west', 'east'];
+    dirs.forEach(d => {
+        assets.playerAnim[d] = { walk: [], idle: null };
+        assets.playerAnim[d].idle = loadImage(`assets/characters/spritesheet/${d}.png`);
+        loadImage(`assets/characters/spritesheet/spritesheet_${d}.png`, (img) => {
+            let fw = img.width / 5;
+            let fh = img.height;
+            for (let i = 0; i < 5; i++) {
+                assets.playerAnim[d].walk.push(img.get(i * fw, 0, fw, fh));
+            }
+        });
+    });
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: ENGINE LIFECYCLE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * p5.js lifecycle hook: initialises the canvas and all system modules.
  */
 function setup() {
     let cvs = createCanvas(GLOBAL_CONFIG.resolutionW, GLOBAL_CONFIG.resolutionH);
-    cvs.parent('canvas-container'); 
-    noSmooth(); // Preserves pixel-art clarity across all rendering layers
+    cvs.parent('canvas-container');
+    noSmooth();
 
-    // Module Instantiation: Building the game hierarchy
-    gameState = new GameState();
-    mainMenu = new MainMenu();
-    roomScene = new RoomScene();
-    inventory = new InventorySystem();
-    env = new Environment();
-    player = new Player();
+    gameState       = new GameState();
+    mainMenu        = new MainMenu();
+    roomScene       = new RoomScene();
+    inventory       = new InventorySystem();
+    env             = new Environment();
+    player          = new Player();
     obstacleManager = new ObstacleManager();
+    backpackUI      = new BackpackVisual(inventory, roomScene);
+    levelController  = new LevelController();
+    endScreenManager = new EndScreenManager();
 
-    // Default font configuration
     textFont(fonts.body);
-
-    // Initial State: Set to Splash to allow for required browser audio-context interaction
     gameState.currentState = STATE_LOADING;
-    
+
+    if (developerMode) devApplyStartupSkip();
 }
 
 /**
- * GLOBAL SFX WRAPPER
- * Standardized interface for playing sound effects with master volume scaling.
+ * p5.js lifecycle hook: main render loop — routes to the active scene each frame.
  */
-function playSFX(sound) {
-    if (sound) {
-        sound.setVolume(masterVolumeSFX);
-        sound.play();
-    }
-}
-
-/**
- * GLOBAL TRANSITION TRIGGER
- * Initiates a fade sequence and executes the callback at the blackout point.
- */
-function triggerTransition(onBlackout) {
-    if (globalFade.isFading) return;
-    globalFade.isFading = true;
-    globalFade.dir = 1;
-    globalFade.alpha = 0;
-    globalFade.callback = onBlackout;
-}
-
-/**
- * GLOBAL TRANSITION RENDERER
- * Final rendering layer to ensure the fade overlay covers all game elements.
- */
-function renderGlobalFade() {
-    if (!globalFade.isFading && globalFade.alpha <= 0) return;
-    globalFade.alpha += globalFade.speed * globalFade.dir;
-    if (globalFade.dir === 1 && globalFade.alpha >= 255) {
-        globalFade.alpha = 255;
-        if (globalFade.callback) globalFade.callback();
-        globalFade.dir = -1;
-    }
-    if (globalFade.dir === -1 && globalFade.alpha <= 0) {
-        globalFade.alpha = 0;
-        globalFade.isFading = false;
-        globalFade.callback = null;
-    }
-    push();
-    noStroke();
-    fill(0, globalFade.alpha);
-    rect(0, 0, width, height);
-    pop();
-}
-
-/**
- * MAIN EXECUTION LOOP
- * High-level scene router that manages draw calls based on the Finite State Machine.
- */
-let pauseIndex = 0;
-const PAUSE_OPTIONS = ["RESUME", "QUIT TO MENU"];
-
 function draw() {
     background(30);
 
@@ -186,16 +267,23 @@ function draw() {
             case STATE_LEVEL_SELECT:
             case STATE_SETTINGS:
             case STATE_HELP:
-                if (mainMenu) mainMenu.display();
+                if (mainMenu) {
+                    mainMenu.menuState = gameState.currentState;
+                    mainMenu.display();
+                }
                 break;
 
             case STATE_ROOM:
                 if (roomScene) roomScene.display();
                 if (player) {
-                    player.update(); 
+                    player.update();
                     player.display();
                 }
                 drawPauseButton();
+                break;
+
+            case STATE_INVENTORY:
+                if (backpackUI) backpackUI.display();
                 break;
 
             case STATE_DAY_RUN:
@@ -212,12 +300,19 @@ function draw() {
                     if (obstacleManager) obstacleManager.display();
                     if (player) player.display();
                 }
-                renderPauseOverlay(); 
+                renderPauseOverlay();
                 break;
-                
+
             case STATE_FAIL:
+                // Draw frozen gameplay behind the overlay
+                if (env) env.display();
+                if (obstacleManager) obstacleManager.display();
+                if (player) player.display();
+                if (endScreenManager) endScreenManager.display();
+                break;
+
             case STATE_WIN:
-                drawEndScreen();
+                if (endScreenManager) endScreenManager.display();
                 break;
         }
     } catch (e) {
@@ -228,348 +323,1161 @@ function draw() {
 }
 
 /**
- * [Role: UI/UX + Core Systems]
- * UI COMPONENT: INTERACTION PROMPTS
- * Displays pulsing instructional text to trigger browser audio context.
+ * Updates all game-world systems for a single frame during the run state.
  */
-function drawInteractionPrompts() {
-    push();
-    textAlign(CENTER, CENTER);
-    
-    // 1. PRIMARY PROMPT: CLICK TO START
-    // Logic: Use sine wave for smooth alpha pulsing (60fps baseline)
-    textFont(fonts.body);
-    let pulse = sin(frameCount * 0.1) * 50; 
-    fill(255, 180 + pulse); // Alpha ranges between 130-230
-    textSize(50);
-    text("CLICK TO START", width / 2, height - 280);
-    
-    // 2. SECONDARY INFO: AUDIO STATUS
-    // Logic: Static, slightly dimmed text for technical instruction
-    fill(255, 120); 
-    textSize(30);
-    text("AUDIO CONTEXT WILL INITIALIZE ON INTERACTION", width / 2, height - 190);
-}
+function runGameLoop() {
+    if (levelController) { levelController.update(); }
+    if (env)             { env.update(GLOBAL_CONFIG.scrollSpeed); env.display(); }
+    if (obstacleManager) { obstacleManager.update(GLOBAL_CONFIG.scrollSpeed, player); obstacleManager.display(); }
+    if (player)          { player.update(); player.display(); }
+    if (levelController) { levelController.display(); }
 
-/**
- * UPDATED SPLASH SCREEN LOGIC
- */
-function drawSplashScreen() {
-    push();
-    imageMode(CORNER); 
-    
-    if (assets.menuBg) {
-        image(assets.menuBg, 0, 0, width, height); 
-    } else {
-        background(20); 
+    // Win condition: settlement point reached
+    if (levelController && levelController.checkSettlementPoint()) {
+        console.log("[runGameLoop] STATE_WIN triggered!");
+        gameState.setState(STATE_WIN);
     }
-    
-    rectMode(CORNER);
-    fill(0, 0, 0, 160);
-    rect(0, 0, width, height);
-    
-    drawLogoPlaceholder(width / 2, 320);
-    drawInteractionPrompts();
-    pop(); 
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: AUDIO
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Plays a sound effect at the global SFX volume level.
+ */
+function playSFX(sound) {
+    if (sound) {
+        sound.setVolume(masterVolumeSFX);
+        sound.play();
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: TRANSITIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Starts a fade-to-black transition. Calls onBlackout at peak opacity,
+ * then fades back in. Ignored if a transition is already running.
+ */
+function triggerTransition(onBlackout) {
+    if (globalFade.isFading) return;
+    globalFade.isFading = true;
+    globalFade.dir      = 1;
+    globalFade.alpha    = 0;
+    globalFade.callback = onBlackout;
 }
 
 /**
- * [Role: UI/UX + Core Systems]
- * LOGIC: DYNAMIC LOGO PLACEHOLDER
- * Serves as a visual bridge until the 800x400 asset is integrated.
+ * Renders the full-screen fade overlay each frame.
+ * Advances the alpha, fires the midpoint callback, and resets state on completion.
  */
-function drawLogoPlaceholder(x, y) {
+function renderGlobalFade() {
+    if (!globalFade.isFading && globalFade.alpha <= 0) return;
+
+    globalFade.alpha += globalFade.speed * globalFade.dir;
+
+    if (globalFade.dir === 1 && globalFade.alpha >= 255) {
+        globalFade.alpha = 255;
+        if (globalFade.callback) globalFade.callback();
+        globalFade.dir = -1;
+    }
+    if (globalFade.dir === -1 && globalFade.alpha <= 0) {
+        globalFade.alpha    = 0;
+        globalFade.isFading = false;
+        globalFade.callback = null;
+    }
+
     push();
-    rectMode(CENTER);
-    
-    // LAYER 1: Boundary Box (Specs: 800x400)
-    // Helps developer verify the spacing in the 1920x1080 canvas
-    noFill();
-    stroke(255, 100); 
-    strokeWeight(1);
-    rect(x, y, 800, 400); 
-    
-    // LAYER 2: Branding Text (Font: Press Start 2P)
-    textAlign(CENTER, CENTER);
-    textFont(fonts.title);
-    
-    // Gold tint for "PARK STREET"
-    fill(255, 215, 0); 
-    textSize(75);
-    text("PARK STREET", x, y - 40);
-    
-    // Pure white for "SURVIVOR"
-    fill(255);
-    textSize(45);
-    text("SURVIVOR", x, y + 60);
-    
-    // LAYER 3: Developer Note
-    textFont(fonts.body);
-    textSize(18);
-    fill(150);
-    text("[ ASSET PENDING: 800 x 400 TITLE LOGO ]", x, y + 150);
+    noStroke();
+    fill(0, globalFade.alpha);
+    rect(0, 0, width, height);
     pop();
 }
 
-/**
- * GAMEPLAY LOGIC SYNCHRONISATION
- * Coordinates the update and display calls for the physics-based running scene.
- */
-function runGameLoop() {
-    if (env) { env.update(GLOBAL_CONFIG.scrollSpeed); env.display(); }
-    if (obstacleManager) { obstacleManager.update(GLOBAL_CONFIG.scrollSpeed, player); obstacleManager.display(); }
-    if (player) { player.update(); player.display(); }
-}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: INPUT HANDLING
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * HARDWARE INPUT ROUTING: KEYBOARD
- * Directs keyboard events to the appropriate system module based on current GameState.
+ * Dispatches keyboard events to the appropriate scene or system handler.
  */
 function keyPressed() {
     if (globalFade.isFading) return;
     let state = gameState.currentState;
 
-    // Logic: Global Pause Trigger
-    if (key === 'p' || key === 'P' || keyCode === ESCAPE) {
-        if (state !== STATE_MENU && state !== STATE_LEVEL_SELECT && state !== STATE_SETTINGS && state !== STATE_HELP && state !== STATE_SPLASH) {
+    // Toggle developer mode
+    if (key === '0') devToggle();
+
+    // Dev shortcuts: 8 = instant WIN, 9 = instant FAIL
+    if (developerMode) {
+        if (key === '8') { devGoToWin();  return; }
+        if (key === '9') { devGoToFail("EXHAUSTED"); return; }
+    }
+
+    // Pause / unpause — available in most gameplay states (but NOT while already paused)
+    if ((key === 'p' || key === 'P' || keyCode === ESCAPE) && state !== STATE_PAUSED) {
+        if (state !== STATE_MENU && state !== STATE_LEVEL_SELECT &&
+            state !== STATE_SETTINGS && state !== STATE_HELP &&
+            state !== STATE_SPLASH && state !== STATE_INVENTORY &&
+            state !== STATE_FAIL && state !== STATE_WIN) {
             playSFX(sfxClick);
             togglePause();
-            pauseIndex = 0; 
-            return; 
+            pauseIndex = -1;
+            showRestartChoice = false;
+            showStoryRecap = false;
+            return;
         }
     }
 
-    // Logic: Pause Menu Navigation
+    // Pause menu navigation
     if (state === STATE_PAUSED) {
-        if (keyCode === UP_ARROW || keyCode === 87 || keyCode === DOWN_ARROW || keyCode === 83) {
-            playSFX(sfxSelect);
+        if (showStoryRecap) {
+            // Story recap: UP/DOWN or W/S scroll content within the day
             if (keyCode === UP_ARROW || keyCode === 87) {
-                pauseIndex = (pauseIndex - 1 + PAUSE_OPTIONS.length) % PAUSE_OPTIONS.length;
-            } else {
-                pauseIndex = (pauseIndex + 1) % PAUSE_OPTIONS.length;
+                if (storyScrollOffset <= 0 && storyRecapDay > 1) {
+                    // Auto-retreat to previous day
+                    storyRecapDay--;
+                    let prevRecap = STORY_RECAPS[storyRecapDay];
+                    storyScrollOffset = max(0, prevRecap.lines.length - 10);
+                } else {
+                    storyScrollOffset = max(0, storyScrollOffset - 1);
+                }
+                if (typeof playSFX === 'function') playSFX(sfxSelect);
+            } else if (keyCode === DOWN_ARROW || keyCode === 83) {
+                let recap = STORY_RECAPS[storyRecapDay];
+                if (recap) {
+                    let maxScroll = max(0, recap.lines.length - 10);
+                    if (storyScrollOffset >= maxScroll) {
+                        // Auto-advance to next day
+                        let nextDay = storyRecapDay + 1;
+                        let isNextUnlocked = (nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                        if (nextDay <= 5 && isNextUnlocked) {
+                            storyRecapDay = nextDay;
+                            storyScrollOffset = 0;
+                        }
+                    } else {
+                        storyScrollOffset = min(maxScroll, storyScrollOffset + 1);
+                    }
+                }
+                if (typeof playSFX === 'function') playSFX(sfxSelect);
+            } else if (keyCode === LEFT_ARROW || keyCode === 65) {
+                // Change to previous day
+                if (storyRecapDay > 1) {
+                    storyRecapDay--;
+                    storyScrollOffset = 0;
+                    if (typeof playSFX === 'function') playSFX(sfxSelect);
+                }
+            } else if (keyCode === RIGHT_ARROW || keyCode === 68) {
+                // Change to next day
+                let nextDay = storyRecapDay + 1;
+                let isNextUnlocked = (nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                if (nextDay <= 5 && isNextUnlocked) {
+                    storyRecapDay = nextDay;
+                    storyScrollOffset = 0;
+                    if (typeof playSFX === 'function') playSFX(sfxSelect);
+                }
+            } else if (keyCode === ESCAPE) {
+                showStoryRecap = false;
+                pauseIndex = -1;
             }
-        } else if (keyCode === ENTER || keyCode === 13) {
-            playSFX(sfxClick);
-            handlePauseSelection();
+            return;
+        } else if (showRestartChoice) {
+            // Restart sub-menu navigation
+            if (keyCode === UP_ARROW || keyCode === 87 || keyCode === DOWN_ARROW || keyCode === 83) {
+                if (typeof playSFX === 'function') playSFX(sfxSelect);
+                if (restartChoiceIndex < 0) {
+                    restartChoiceIndex = 0;
+                } else {
+                    restartChoiceIndex = (restartChoiceIndex + 1) % RESTART_OPTIONS.length;
+                }
+            } else if ((keyCode === ENTER || keyCode === 13) && restartChoiceIndex >= 0) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                handleRestartChoice();
+            } else if (keyCode === ESCAPE) {
+                showRestartChoice = false;
+                pauseIndex = -1;
+            }
+        } else {
+            let options = getPauseOptions();
+            if (keyCode === UP_ARROW || keyCode === 87 || keyCode === DOWN_ARROW || keyCode === 83) {
+                if (typeof playSFX === 'function') playSFX(sfxSelect);
+                
+                if (pauseIndex < 0) {
+                    if (keyCode === UP_ARROW || keyCode === 87) {
+                        pauseIndex = options.length - 1;
+                    } else {
+                        pauseIndex = 0;
+                    }
+                } else if (keyCode === UP_ARROW || keyCode === 87) {
+                    pauseIndex = (pauseIndex - 1 + options.length) % options.length;
+                } else {
+                    pauseIndex = (pauseIndex + 1) % options.length;
+                }
+            } else if ((keyCode === ENTER || keyCode === 13) && pauseIndex >= 0) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                handlePauseSelection();
+            } else if (keyCode === ESCAPE) {
+                // Back arrow behavior: resume from pause
+                togglePause();
+                pauseFromState = null;
+                showStoryRecap = false;
+            }
         }
-        return; 
+        return;
     }
 
-    // Module Delegation: Route inputs to active scenes
-    if (state === STATE_MENU || state === STATE_LEVEL_SELECT || state === STATE_SETTINGS || state === STATE_HELP) {
+    // Menu navigation
+    if (state === STATE_MENU || state === STATE_LEVEL_SELECT ||
+        state === STATE_SETTINGS || state === STATE_HELP) {
         if (mainMenu) mainMenu.handleKeyPress(key, keyCode);
-    } 
+    }
+    // Room navigation + inventory toggle (E key handled inside roomScene — desk-proximity gated)
     else if (state === STATE_ROOM) {
         if (roomScene) roomScene.handleKeyPress(keyCode);
     }
+    // End screen navigation (fail / win)
     else if (state === STATE_FAIL || state === STATE_WIN) {
-        if (keyCode === ENTER || keyCode === 13) {
-            playSFX(sfxClick);
-            setupRun(currentDayID);
-        }
+        if (endScreenManager) endScreenManager.handleKeyPress(keyCode);
+    }
+
+    // Close inventory with ESC
+    if (gameState.currentState === STATE_INVENTORY && keyCode === ESCAPE) {
+        gameState.currentState = STATE_ROOM;
+        return false;
     }
 }
 
 /**
- * STATE RESOLUTION: PAUSE INTERFACE
- * Handles the logic for resuming gameplay or returning to the main menu.
+ * Executes the selected option in the pause menu.
  */
 function handlePauseSelection() {
-    if (PAUSE_OPTIONS[pauseIndex] === "RESUME") {
+    let options = getPauseOptions();
+    let selected = options[pauseIndex];
+
+    if (selected === "RESUME") {
         togglePause();
-    } else if (PAUSE_OPTIONS[pauseIndex] === "QUIT TO MENU") {
+    } else if (selected === "STORY") {
+        showStoryRecap = true;
+        storyRecapDay = 1;
+        storyScrollOffset = 0;
+    } else if (selected === "SETTINGS") {
+        pauseFromState = gameState.previousState;
+        if (typeof playSFX === 'function') playSFX(sfxClick);
+        gameState.currentState = STATE_SETTINGS;
+        mainMenu.menuState     = STATE_SETTINGS;
+    } else if (selected === "HELP") {
+        pauseFromState         = gameState.previousState;
+        if (typeof playSFX === 'function') playSFX(sfxClick);
+        gameState.currentState = STATE_HELP;
+        mainMenu.menuState     = STATE_HELP;
+        mainMenu.helpPage      = 0;
+    } else if (selected === "QUIT TO MENU") {
         triggerTransition(() => {
             gameState.setState(STATE_MENU);
             mainMenu.menuState = STATE_MENU;
+            pauseFromState     = null;
+            if (typeof showRestartChoice !== 'undefined') showRestartChoice = false;
+            if (typeof showStoryRecap !== 'undefined') showStoryRecap = false;
+        });
+    } else if (selected === "RESTART") {
+        if (typeof showRestartChoice !== 'undefined') {
+            showRestartChoice   = true;
+            restartChoiceIndex  = -1;
+        } else {
+            triggerTransition(() => {
+                gameState.resetFlags();
+                setupRun(currentDayID);
+            });
+        }
+    }
+}
+
+function handleRestartChoice() {
+    if (RESTART_OPTIONS[restartChoiceIndex] === "BACK TO ROOM") {
+        triggerTransition(() => {
+            showRestartChoice = false;
+            gameState.setState(STATE_ROOM);
+            if (roomScene) roomScene.reset();
+            pauseFromState = null;
+        });
+    } else if (RESTART_OPTIONS[restartChoiceIndex] === "RESTART RUN") {
+        triggerTransition(() => {
+            showRestartChoice = false;
+            player.applyLevelStats(currentDayID);
+            player.x = 500;
+            player.y = height / 2;
+            obstacleManager = new ObstacleManager();
+            levelController.initializeLevel(currentDayID);
+            gameState.setState(STATE_DAY_RUN);
+            pauseFromState = null;
         });
     }
 }
 
 /**
- * HARDWARE INPUT ROUTING: MOUSE
- * Manages click-based interactions, including the Splash screen audio unlock.
+ * Dispatches mouse press events; also unlocks the Web Audio context on first click.
  */
 function mousePressed() {
     if (globalFade.isFading) return;
     let state = gameState.currentState;
 
-    // Logic: Audio Context Unlock (Browser Security Policy requirement)
+    // Splash screen: unlock audio and transition to main menu
     if (state === STATE_SPLASH) {
-        if (getAudioContext().state !== 'running') {
-            getAudioContext().resume();
-        }
-
+        if (getAudioContext().state !== 'running') getAudioContext().resume();
         playSFX(sfxClick);
         if (bgm && !bgm.isPlaying()) {
             bgm.setVolume(masterVolumeBGM);
             bgm.loop();
         }
-
-        triggerTransition(() => {
-        gameState.setState(STATE_MENU);
-        });
-
+        triggerTransition(() => gameState.setState(STATE_MENU));
         return;
     }
 
-    // Menu and In-game UI interaction routing
-    if (state === STATE_MENU || state === STATE_LEVEL_SELECT || state === STATE_SETTINGS || state === STATE_HELP) {
-        if (mainMenu) mainMenu.handleClick(mouseX, mouseY);
+    if (state === STATE_PAUSED) {
+        if (assets.backImg) {
+            let bx = 70, by = 65;
+            if (dist(mouseX, mouseY, bx, by) < 40) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                
+                if (typeof showStoryRecap !== 'undefined' && showStoryRecap) {
+                    showStoryRecap = false;
+                    pauseIndex = -1;
+                } else if (typeof showRestartChoice !== 'undefined' && showRestartChoice) {
+                    showRestartChoice = false;
+                    pauseIndex = -1;
+                } else {
+                    togglePause();
+                }
+                return;
+            }
+        }
+        
+        if (typeof showRestartChoice !== 'undefined' && showRestartChoice) {
+            if (typeof restartChoiceIndex !== 'undefined' && restartChoiceIndex >= 0) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                handleRestartChoice();
+            }
+        } else if (!showStoryRecap) {
+            if (pauseIndex >= 0) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                handlePauseSelection();
+            }
+        }
+        return;
     }
-    else if (state === STATE_ROOM || state === STATE_DAY_RUN) {
-        // Logic: Virtual Pause Button Detection
-        if (dist(mouseX, mouseY, width - 60, 50) < 25) {
+
+    if (state === STATE_MENU || state === STATE_LEVEL_SELECT ||
+        state === STATE_SETTINGS || state === STATE_HELP) {
+        if (mainMenu) mainMenu.handleClick(mouseX, mouseY);
+    } else if (state === STATE_PAUSED) {
+        if (showStoryRecap) {
+            // Story recap clicks
+            // Back arrow → close story recap
+            if (dist(mouseX, mouseY, 70, 65) < 40) {
+                playSFX(sfxClick);
+                showStoryRecap = false;
+                return;
+            }
+            // Day sidebar click (left side, skewed cards)
+            let sidebarAnchorX = width * 0.12;
+            let sidebarBaseY = height * 0.45;
+            for (let i = 0; i < 5; i++) {
+                let diff = i - (storyRecapDay - 1);
+                let cardY = sidebarBaseY + diff * 130;
+                if (mouseX > sidebarAnchorX - 120 && mouseX < sidebarAnchorX + 120 &&
+                    mouseY > cardY - 40 && mouseY < cardY + 40) {
+                    let day = i + 1;
+                    let isUnlocked = (day <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                    if (isUnlocked) {
+                        storyRecapDay = day;
+                        storyScrollOffset = 0;
+                        playSFX(sfxSelect);
+                    }
+                    return;
+                }
+            }
+            // Up/Down arrow click (right side) — change days
+            let arrowX = width - 100;
+            if (dist(mouseX, mouseY, arrowX, height / 2 - 80) < 35) {
+                if (storyRecapDay > 1) {
+                    storyRecapDay--;
+                    storyScrollOffset = 0;
+                    playSFX(sfxSelect);
+                }
+                return;
+            }
+            if (dist(mouseX, mouseY, arrowX, height / 2 + 80) < 35) {
+                let nextDay = storyRecapDay + 1;
+                let isNextUnlocked = (nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                if (nextDay <= 5 && isNextUnlocked) {
+                    storyRecapDay = nextDay;
+                    storyScrollOffset = 0;
+                    playSFX(sfxSelect);
+                }
+                return;
+            }
+        } else if (showRestartChoice) {
+            // Restart sub-menu click (larger hit area)
+            let optW = 280, optH = 80;
+            for (let i = 0; i < RESTART_OPTIONS.length; i++) {
+                let ox = width / 2;
+                let oy = height / 2 + 20 + i * 80;
+                if (mouseX > ox - optW / 2 && mouseX < ox + optW / 2 &&
+                    mouseY > oy - optH / 2 && mouseY < oy + optH / 2) {
+                    restartChoiceIndex = i;
+                    playSFX(sfxClick);
+                    handleRestartChoice();
+                    return;
+                }
+            }
+            // Back arrow click in restart submenu
+            if (dist(mouseX, mouseY, 70, 65) < 40) {
+                playSFX(sfxClick);
+                showRestartChoice = false;
+                return;
+            }
+        } else {
+            // Back arrow click → resume (replaces RESUME button)
+            if (dist(mouseX, mouseY, 70, 65) < 40) {
+                playSFX(sfxClick);
+                togglePause();
+                pauseFromState = null;
+                return;
+            }
+            // Pause menu option click (larger hit area)
+            let options = getPauseOptions();
+            let optW = 280, optH = 80;
+            for (let i = 0; i < options.length; i++) {
+                let ox = width / 2;
+                let oy = height / 2 + 20 + i * 80;
+                if (mouseX > ox - optW / 2 && mouseX < ox + optW / 2 &&
+                    mouseY > oy - optH / 2 && mouseY < oy + optH / 2) {
+                    pauseIndex = i;
+                    playSFX(sfxClick);
+                    handlePauseSelection();
+                    return;
+                }
+            }
+        }
+    } else if (state === STATE_ROOM) {
+        // Room back arrow click
+        if (roomScene && roomScene.backButton.checkMouse(mouseX, mouseY)) {
+            roomScene.backButton.handleClick();
+            return;
+        }
+        // Pause button hit-test
+        let pbx = width - 70, pby = 65;
+        if (dist(mouseX, mouseY, pbx, pby) < 60) {
             playSFX(sfxClick);
             togglePause();
-            pauseIndex = 0;
+            pauseIndex = -1;
+            showRestartChoice = false;
+            showStoryRecap = false;
         }
+    } else if (state === STATE_DAY_RUN) {
+        // Pause button hit-test
+        let pbx = width - 70, pby = 65;
+        if (dist(mouseX, mouseY, pbx, pby) < 60) {
+            playSFX(sfxClick);
+            togglePause();
+            pauseIndex = -1;
+            showRestartChoice = false;
+            showStoryRecap = false;
+        }
+    } else if (state === STATE_FAIL || state === STATE_WIN) {
+        if (endScreenManager) endScreenManager.handleClick(mouseX, mouseY);
+    }
+
+    if (gameState.currentState === STATE_INVENTORY) {
+        if (backpackUI) backpackUI.handleMousePressed(mouseX, mouseY);
     }
 }
 
 /**
- * MOUSE RELEASE ROUTER
- * Notifies active modules of button release events for UI components like sliders.
+ * Dispatches mouse release events to the active UI systems.
  */
 function mouseReleased() {
     if (mainMenu) mainMenu.handleRelease();
-}
-
-/**
- * UTILITY: PAUSE TOGGLE
- * Efficiently swaps between the active scene and the pause overlay.
- */
-function togglePause() {
-    if (gameState.currentState === STATE_PAUSED) {
-        gameState.setState(gameState.previousState);
-    } else {
-        gameState.setState(STATE_PAUSED);
+    if (gameState.currentState === STATE_INVENTORY) {
+        if (backpackUI) backpackUI.handleMouseReleased(mouseX, mouseY);
     }
 }
 
 /**
- * SESSION MANAGER: LEVEL BOOTSTRAP
- * Resets the environment, player stats, and state machine to prepare for a specific Day.
+ * Dispatches mouse drag events to the active UI systems.
+ */
+function mouseDragged() {
+    if (gameState.currentState === STATE_INVENTORY) {
+        if (backpackUI) backpackUI.handleMouseDragged(mouseX, mouseY);
+    }
+}
+
+/**
+ * Dispatches mouse move events to the active UI systems.
+ */
+function mouseWheel(event) {
+    if (gameState.currentState === STATE_PAUSED && showStoryRecap) {
+        let recap = STORY_RECAPS[storyRecapDay];
+        if (!recap) return false;
+        let maxScroll = max(0, recap.lines.length - 10);
+        if (event.delta > 0) {
+            // Scroll down
+            if (storyScrollOffset >= maxScroll) {
+                // Auto-advance to next day
+                let nextDay = storyRecapDay + 1;
+                let isNextUnlocked = (nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                if (nextDay <= 5 && isNextUnlocked) {
+                    storyRecapDay = nextDay;
+                    storyScrollOffset = 0;
+                    playSFX(sfxSelect);
+                }
+            } else {
+                storyScrollOffset = min(maxScroll, storyScrollOffset + 2);
+            }
+        } else {
+            // Scroll up
+            if (storyScrollOffset <= 0) {
+                // Auto-retreat to previous day
+                let prevDay = storyRecapDay - 1;
+                if (prevDay >= 1) {
+                    let prevRecap = STORY_RECAPS[prevDay];
+                    storyRecapDay = prevDay;
+                    storyScrollOffset = max(0, prevRecap.lines.length - 10);
+                    playSFX(sfxSelect);
+                }
+            } else {
+                storyScrollOffset = max(0, storyScrollOffset - 2);
+            }
+        }
+        return false; // prevent page scroll
+    }
+}
+
+function mouseMoved() {
+    if (gameState.currentState === STATE_FAIL || gameState.currentState === STATE_WIN) {
+        if (endScreenManager) endScreenManager.handleMouseMove(mouseX, mouseY);
+    }
+    if (gameState.currentState === STATE_INVENTORY) {
+        if (backpackUI) backpackUI.handleMouseMoved(mouseX, mouseY);
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: STATE MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Toggles between the paused state and the previous active state.
+ */
+function togglePause() {
+    if (gameState.currentState === STATE_PAUSED) gameState.setState(gameState.previousState);
+    else gameState.setState(STATE_PAUSED);
+}
+
+/**
+ * Initialises and starts a new run for the given day ID.
  */
 function setupRun(dayID) {
     currentDayID = dayID;
     player.applyLevelStats(dayID);
-    player.x = 500; 
-    player.y = height / 2; 
+    player.x = 500;
+    player.y = height / 2;
     roomScene.reset();
-    obstacleManager = new ObstacleManager(); // Clear previous level hazards
+    obstacleManager = new ObstacleManager();
+    levelController.initializeLevel(dayID);
     gameState.setState(STATE_ROOM);
 }
 
 /**
- * UI RENDERING: SESSION RESULTS
- * Displays final results (Success/Failure) and provides navigation feedback.
+ * [Role: Core Systems Developer]
+ * LEVEL BOOTSTRAP: Starts a specific day directly into the RUN state, skipping the room.
  */
-function drawEndScreen() {
-    if (assets.menuBg) image(assets.menuBg, 0, 0, width, height);
-    else background(20); 
-
-    textAlign(CENTER, CENTER);
-    let state = gameState.currentState;
+function setupRunDirectly(dayID) {
+    currentDayID = dayID;
+    player.applyLevelStats(dayID);
     
-    textFont(fonts.title);
-    if (state === STATE_WIN) {
-        fill(100, 255, 100); textSize(80); text("SUCCESS", width/2, height/2 - 50);
-    } else {
-        fill(255, 50, 50); textSize(80); text("FAILED", width/2, height/2 - 50);
-    }
-
-    textFont(fonts.body);
-    fill(255); textSize(24); 
-    let displayMessage = (gameState.failReason === "HIT_BUS") ? "You were hit by a speeding bus." :
-                         (gameState.failReason === "EXHAUSTED") ? "You ran out of energy." :
-                         (gameState.failReason === "LATE") ? "You are fired!" : "Game Over.";
-    text(displayMessage, width / 2, height / 2 + 20);
-    textSize(18); text("Press ENTER to return to Room", width/2, height/2 + 100);
+    // Set position matching the "Exit Door" logic in RoomScene
+    player.x = width / 2; 
+    player.y = height - 200; 
+    
+    obstacleManager = new ObstacleManager();
+    gameState.setState(STATE_DAY_RUN);
 }
 
-/**
- * UI RENDERING: INTERACTIVE HUD ELEMENTS
- * Draws the global pause button accessible during gameplay.
- */
-function drawPauseButton() {
-    push();
-    let bx = width - 60; let by = 50;
-    noFill(); stroke(255, 150); strokeWeight(2); ellipse(bx, by, 40, 40);
-    fill(255, 150); noStroke(); rectMode(CENTER);
-    rect(bx - 5, by, 4, 15); rect(bx + 5, by, 4, 15);
-    pop();
-}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: UI RENDERING
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * UI RENDERING: PAUSE INTERFACE
- * Renders the selection menu when the game is in a suspended state.
- */
-function renderPauseOverlay() {
-    push();
-    fill(0, 0, 0, 150); 
-    rectMode(CORNER); 
-    rect(0, 0, width, height);
-    
-    textAlign(CENTER, CENTER);
-    textFont(fonts.title); 
-    fill(255); 
-    textSize(60); 
-    text("PAUSED", width / 2, height / 2 - 100);
-    
-    textFont(fonts.body);
-    for (let i = 0; i < PAUSE_OPTIONS.length; i++) {
-        let isSelected = (i === pauseIndex);
-        fill(isSelected ? 255 : 150); 
-        textSize(isSelected ? 32 : 28);
-        text(isSelected ? `> ${PAUSE_OPTIONS[i]} <` : PAUSE_OPTIONS[i], width / 2, height / 2 + 20 + i * 60);
-    }
-    pop();
-}
-
-/**
- * BRANDED LOADING SCREEN
- * Features: Terminal-style text, animated keycaps, and a minimalist progress line.
- */
-/**
- * BRANDED LOADING SCREEN: PIXEL DOT VARIANT
+ * Renders the loading bar and UoB logo while assets stream in.
+ * Transitions to STATE_SPLASH once the bar reaches 100%.
  */
 function drawLoadingScreen() {
     background(10, 10, 15);
     let cx = width / 2;
     let cy = height / 2;
 
-    if (assets.keys && assets.keys.enter) {
-        let sheet = assets.keys.enter;
-        let animFrame = floor(frameCount / 15) % 3;
+    if (assets.uobLogo) {
+        push();
         imageMode(CENTER);
-        tint(255, 215, 0, sin(frameCount * 0.1) * 40 + 200);
-        image(sheet, cx, cy - 60, 120, 80, animFrame * (sheet.width / 3), 0, sheet.width / 3, sheet.height);
-        noTint();
+        let wave       = sin(frameCount * 0.05);
+        let imgScale   = 1.0 + wave * 0.05;
+        let alphaValue = 180 + wave * 75;
+        tint(255, alphaValue);
+        image(assets.uobLogo, cx, cy - 80, 120 * imgScale, 120 * imgScale);
+        pop();
     }
 
-    textAlign(CENTER, CENTER);
-    textFont(fonts.title);
-    fill(255, 215, 0);
-    textSize(22);
-    text("SYSTEM INITIALIZING" + ((floor(frameCount / 20) % 2 === 0) ? "_" : " "), cx, cy + 40);
-
-    let dots = 10, dSize = 12, dGap = 8;
-    let totalW = (dSize + dGap) * dots - dGap;
-    
-    let loadingFrames = 120; 
-    let progress = min(frameCount / loadingFrames, 1.0); 
-    let litDots = floor(progress * dots);
-
-    rectMode(CENTER);
-    for (let i = 0; i < dots; i++) {
-        let px = cx - totalW / 2 + i * (dSize + dGap) + dSize / 2;
-        fill(i < litDots ? [255, 215, 0] : 40);
-        rect(px, cy + 90, dSize, dSize);
+    // Smooth the raw load ratio for a cleaner animation
+    if (smoothProgress < loadProgress) {
+        smoothProgress += 0.010;
     }
+    smoothProgress = constrain(smoothProgress, 0, 1.0);
 
-    if (progress >= 1.0) {
-        if (frameCount % 30 === 0) {
-            gameState.currentState = STATE_SPLASH;
+    drawLoadingProgressBar(cx, cy + 80, smoothProgress);
+
+    if (smoothProgress >= 1.0) {
+        setTimeout(() => {
+            if (gameState.currentState === STATE_LOADING) {
+                gameState.setState(STATE_SPLASH);
+            }
+        }, 150);
+    }
+}
+
+/**
+ * Draws a segmented pixel-art progress bar at the given position.
+ * @param {number} x        Centre X of the bar.
+ * @param {number} y        Centre Y of the bar.
+ * @param {number} progress Normalised fill ratio [0, 1].
+ */
+function drawLoadingProgressBar(x, y, progress) {
+    let totalSegments = 10;
+    let gap    = 8;
+    let blockW = 24;
+    let blockH = 16;
+    let totalW = (blockW * totalSegments) + (gap * (totalSegments - 1));
+
+    push();
+    textAlign(CENTER, TOP);
+    textFont(fonts.time);
+    textSize(18);
+    fill(255, 216, 0, 180);
+    text("[ " + floor(progress * 100) + "% COMPLETE ]", x, y + 25);
+
+    rectMode(CORNER);
+    for (let i = 0; i < totalSegments; i++) {
+        let bx        = (x - totalW / 2) + i * (blockW + gap);
+        let by        = y - blockH / 2;
+        let threshold = (i + 1) / totalSegments;
+
+        if (progress >= threshold) {
+            // Filled segment
+            fill(255, 216, 0, 230);
+            noStroke();
+            rect(bx, by, blockW, blockH);
+            // Pixel highlight strip
+            fill(255, 255, 255, 100);
+            rect(bx, by, blockW, 2);
+        } else {
+            // Empty segment
+            fill(255, 216, 0, 30);
+            noStroke();
+            rect(bx, by, blockW, blockH);
+            stroke(255, 216, 0, 50);
+            strokeWeight(1);
+            noFill();
+            rect(bx, by, blockW, blockH);
         }
     }
+    pop();
+}
+
+/**
+ * Renders the splash screen: background, darkening overlay, logo, and prompts.
+ */
+function drawSplashScreen() {
+    push();
+    imageMode(CORNER);
+    if (assets.menuBg) image(assets.menuBg, 0, 0, width, height);
+    else background(20);
+
+    rectMode(CORNER);
+    fill(0, 0, 0, 160);
+    rect(0, 0, width, height);
+
+    drawLogoPlaceholder(width / 2, 320);
+    drawInteractionPrompts();
+    pop();
+}
+
+/**
+ * Renders the animated game logo with a physics-based drop-in and cloud layers.
+ * @param {number} x Target centre X.
+ * @param {number} y Target centre Y.
+ */
+function drawLogoPlaceholder(x, y) {
+    let isSplash = (gameState.currentState === STATE_SPLASH);
+    let t        = frameCount * 0.02;
+    let targetY  = isSplash ? (y + 160) : (y + 10);
+
+    // Drop-in physics
+    if (!titleDrop.landed) {
+        titleDrop.vy += 1.2;
+        titleDrop.y  += titleDrop.vy;
+        if (titleDrop.y >= y + 160) {
+            titleDrop.y      = y + 160;
+            titleDrop.landed = true;
+            titleDrop.shake  = 6;
+        }
+    } else {
+        titleDrop.y = lerp(titleDrop.y, targetY, 0.15);
+    }
+    titleDrop.shake *= 0.7;
+
+    // Full-screen logo background
+    if (isSplash && assets.logoImgs && assets.logoImgs[4]) {
+        push();
+        imageMode(CENTER);
+        image(assets.logoImgs[4], width / 2, height / 2, width * 1.02, height * 1.02);
+        pop();
+    }
+
+    // Rear cloud layer
+    if (isSplash && assets.selectClouds) {
+        push();
+        imageMode(CENTER);
+        tint(255, 255, 255, 200);
+        image(assets.selectClouds[1], width * 0.1,  height * 0.9  + cos(t) * 10,  800, 480);
+        image(assets.selectClouds[2], width * 0.1,  height * 0.2  + sin(t) * 10,  700, 420);
+        image(assets.selectClouds[4], width * 1.0,  height * 0.09 + sin(t) * 10,  700, 420);
+        pop();
+    }
+
+    // "PARK STREET" title
+    push();
+    translate(x + random(-titleDrop.shake, titleDrop.shake), titleDrop.y);
+    drawSplitTitle("PARK STREET", 300, -130, 25);
+    pop();
+
+    // Mid cloud layer (between title lines)
+    if (isSplash && assets.selectClouds) {
+        push();
+        imageMode(CENTER);
+        noTint();
+        image(assets.selectClouds[0], x - 240, y + 250 + sin(t * 1.2) * 8, 500, 300);
+        pop();
+    }
+
+    // "SURVIVOR" subtitle
+    push();
+    translate(x + random(-titleDrop.shake, titleDrop.shake), titleDrop.y);
+    drawSplitTitle("SURVIVOR", 200, 80, 20);
+    pop();
+
+    // Front cloud layer
+    if (isSplash && assets.selectClouds) {
+        push();
+        imageMode(CENTER);
+        noTint();
+        image(assets.selectClouds[2], width * 0.88, y + 230 + sin(t) * 10, 600, 360);
+        pop();
+    }
+}
+
+/**
+ * Renders a single title string with a gold fill, purple stroke, and drop shadow.
+ * @param {string} txt     Text to render.
+ * @param {number} size    Font size.
+ * @param {number} yOff    Y offset from current translation origin.
+ * @param {number} sWeight Stroke weight.
+ */
+function drawSplitTitle(txt, size, yOff, sWeight) {
+    textAlign(CENTER, CENTER);
+    textFont(fonts.logo);
+    textSize(size);
+    drawingContext.lineJoin = 'round';
+    // Drop shadow
+    noStroke();
+    fill(40, 15, 60, 150);
+    text(txt, 7, yOff + 7);
+    // Main text with purple outline
+    strokeWeight(sWeight);
+    stroke(110, 60, 150);
+    fill(255, 216, 0);
+    text(txt, 0, yOff);
+}
+
+/**
+ * Renders the "CLICK TO START" pulse prompt and the audio warning on the splash screen.
+ */
+function drawInteractionPrompts() {
+    push();
+    textAlign(CENTER, CENTER);
+    textFont(fonts.time);
+    let pulse = sin(frameCount * 0.1) * 50;
+    fill(255, 180 + pulse);
+    textSize(60);
+    text("CLICK TO START", width / 2, height - 280);
+
+    fill(255, 255);
+    textSize(40);
+    text("PLEASE USE HEADPHONES & LOWER VOLUME. AUDIO INITIALIZES ON CLICK.", width / 2, height - 190);
+    pop();
+}
+
+/**
+ * Renders the circular pause button in the top-right corner of the screen.
+ */
+function drawPauseButton() {
+    push();
+    let sz = 120;
+    let bx = width - 70;
+    let by = 65;
+    let isHover = dist(mouseX, mouseY, bx, by) < sz / 2;
+
+    // Smooth breathing scale: hover targets 1.15, otherwise gentle pulse
+    let breathe = 1.0 + sin(frameCount * 0.06) * 0.03;
+    let targetScale = isHover ? 1.15 : breathe;
+    pauseBtnScale = lerp(pauseBtnScale, targetScale, 0.12);
+
+    imageMode(CENTER);
+    translate(bx, by);
+    scale(pauseBtnScale);
+    if (assets.pauseImg) {
+        image(assets.pauseImg, 0, 0, sz, sz);
+    }
+    pop();
+}
+
+/**
+ * Renders the pause menu overlay with background, title, and selectable options.
+ */
+function renderPauseOverlay() {
+    push();
+    if (assets.otherBg) {
+        imageMode(CORNER);
+        image(assets.otherBg, 0, 0, width, height);
+        noStroke();
+        fill(0, 0, 0, 160);
+        rect(0, 0, width, height);
+    } else {
+        fill(0, 0, 0, 200);
+        rect(0, 0, width, height);
+    }
+
+    // Back arrow (top-left) — replaces RESUME, click to go back
+    if (assets.backImg) {
+        let bx = 70, by = 65;
+        let isBackHover = dist(mouseX, mouseY, bx, by) < 40;
+        push();
+        translate(bx, by);
+        if (isBackHover) scale(1.15);
+        imageMode(CENTER);
+        image(assets.backImg, 0, 0, 120, 120);
+        pop();
+    }
+
+    if (showStoryRecap) {
+        // ── Story Recap page ──
+        renderStoryRecap();
+    } else if (showRestartChoice) {
+        // ── Restart sub-menu ──
+        let titleY = height / 2 - 280;
+        textAlign(CENTER, CENTER);
+        textFont(fonts.title);
+        textSize(48);
+        stroke(0, 0, 0, 180); strokeWeight(6); fill(255, 215, 0);
+        text("RESTART?", width / 2, titleY);
+        noStroke(); fill(255, 215, 0);
+        text("RESTART?", width / 2, titleY);
+
+        let optW = 280, optH = 80;  
+        let spacing = 95;
+        let totalH = (RESTART_OPTIONS.length - 1) * spacing;
+        let startY = (height / 2) - (totalH / 2) + 20;
+
+        let anyRestartHover = false;
+        for (let i = 0; i < RESTART_OPTIONS.length; i++) {
+            let ox = width / 2;
+            let oy = startY + i * spacing;
+            
+            let isHover = (mouseX > ox - optW / 2 && mouseX < ox + optW / 2 &&
+                           mouseY > oy - optH / 2 && mouseY < oy + optH / 2);
+            if (isHover) { restartChoiceIndex = i; anyRestartHover = true; }
+            let isSelected = (i === restartChoiceIndex) && restartChoiceIndex >= 0;
+
+            push();
+            translate(ox, oy);
+            if (isSelected) scale(1.15);
+            imageMode(CENTER);
+            if (assets.btnImg) image(assets.btnImg, 0, 0, optW * 2, optH * 2);
+
+            textFont(fonts.body); textSize(24); textAlign(CENTER, CENTER);
+            stroke(0, 0, 0, 180); strokeWeight(5); fill(255, 215, 0);
+            text(RESTART_OPTIONS[i], 0, -6);
+            noStroke(); fill(255, 215, 0);
+            text(RESTART_OPTIONS[i], 0, -6);
+            pop();
+        }
+        if (!anyRestartHover && !keyIsPressed) restartChoiceIndex = -1;
+        
+    } else {
+        // ── Normal pause menu ──
+        let options = getPauseOptions();
+
+        let titleY = height / 2 - 320;
+        textAlign(CENTER, CENTER);
+        textFont(fonts.title);
+        textSize(60);
+        stroke(0, 0, 0, 180); strokeWeight(6); fill(255, 215, 0);
+        text("PAUSED", width / 2, titleY);
+        noStroke(); fill(255, 215, 0);
+        text("PAUSED", width / 2, titleY);
+
+        let optW = 280, optH = 80;  
+        let spacing = 95;
+        let totalH = (options.length - 1) * spacing;
+        let startY = (height / 2) - (totalH / 2) + 30;
+
+        let anyPauseHover = false;
+        for (let i = 0; i < options.length; i++) {
+            let ox = width / 2;
+            let oy = startY + i * spacing;
+            
+            let isHover = (mouseX > ox - optW / 2 && mouseX < ox + optW / 2 &&
+                           mouseY > oy - optH / 2 && mouseY < oy + optH / 2);
+            if (isHover) { pauseIndex = i; anyPauseHover = true; }
+            let isSelected = (i === pauseIndex) && pauseIndex >= 0;
+
+            push();
+            translate(ox, oy);
+            if (isSelected) scale(1.15);
+            imageMode(CENTER);
+            if (assets.btnImg) image(assets.btnImg, 0, 0, optW * 2, optH * 2);
+
+            textFont(fonts.body); textSize(24); textAlign(CENTER, CENTER);
+            stroke(0, 0, 0, 180); strokeWeight(5); fill(255, 215, 0);
+            text(options[i], 0, -6);
+            noStroke(); fill(255, 215, 0);
+            text(options[i], 0, -6);
+            pop();
+        }
+        if (!anyPauseHover && !keyIsPressed) pauseIndex = -1;
+    }
+    pop();
+}
+
+/**
+ * Renders the story recap sub-page inside the pause overlay.
+ * Layout: left sidebar (Day 1-5 tabs), center (story text), right (up/down arrows).
+ */
+function renderStoryRecap() {
+    let dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
+
+    // ── Left sidebar: skewed day cards (TimeWheel style) ──
+    let sidebarX = width * 0.12;
+    let sidebarBaseY = height * 0.45;
+    let cardSpacing = 130;
+
+    push();
+    translate(sidebarX, sidebarBaseY);
+    for (let i = 0; i < 5; i++) {
+        let day = i + 1;
+        let diff = i - (storyRecapDay - 1);
+        let distFromCenter = abs(diff);
+        let y = diff * cardSpacing;
+        let x = distFromCenter * 30;
+
+        let isUnlocked = (day <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+        let isSelected = (day === storyRecapDay);
+        let alpha = map(distFromCenter, 0, 2, 255, 50);
+        let s = map(distFromCenter, 0, 1, 1.15, 0.8);
+
+        push();
+        translate(x, y);
+        rotate(radians(-12));
+        scale(constrain(s, 0.5, 1.4));
+
+        noStroke();
+        if (!isUnlocked) {
+            fill(30, 30, 45, alpha * 0.7);
+        } else {
+            fill(isSelected ? [255, 20, 147, alpha] : [70, 20, 90, alpha * 0.6]);
+        }
+
+        beginShape();
+        vertex(-110, -32); vertex(130, -44);
+        vertex(110, 32); vertex(-130, 44);
+        endShape(CLOSE);
+
+        textAlign(LEFT, CENTER);
+        textFont(fonts.title);
+        textSize(40);
+        fill(isSelected ? color(255, 215, 0, alpha) : color(255, alpha));
+        text(day.toString().padStart(2, '0'), -90, 4);
+
+        textFont(fonts.body);
+        textSize(18);
+        fill(isSelected ? color(255, 215, 0, alpha) : color(255, 215, 0, alpha * 0.8));
+        if (isUnlocked) {
+            text(dayNames[i], -10, 8);
+        } else {
+            fill(180, 60, 60, alpha);
+            textSize(14);
+            text("LOCKED", -10, 8);
+        }
+
+        pop();
+    }
+    pop();
+
+    // ── Center: Cloud with story content (bigger) ──
+    let cloudX = width * 0.55;
+    let cloudY = height * 0.48;
+    let cloudW = 900, cloudH = 600;
+    let cloudImg = assets.selectClouds ? assets.selectClouds[0] : null;
+    let isUnlocked = (storyRecapDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+    let recap = STORY_RECAPS[storyRecapDay];
+
+    if (cloudImg) {
+        push();
+        translate(cloudX, cloudY);
+        imageMode(CENTER);
+
+        if (!isUnlocked) {
+            drawingContext.filter = 'grayscale(100%) brightness(0.6)';
+        } else {
+            drawingContext.shadowBlur = 30;
+            drawingContext.shadowColor = 'rgba(255, 105, 180, 0.5)';
+        }
+
+        image(cloudImg, 0, 0, cloudW, cloudH);
+        drawingContext.shadowBlur = 0;
+        drawingContext.filter = 'none';
+        pop();
+    }
+
+    // Story text inside cloud area (clipped to ellipse)
+    if (recap && isUnlocked) {
+        push();
+        drawingContext.save();
+        drawingContext.beginPath();
+        drawingContext.ellipse(cloudX, cloudY, cloudW * 0.42, cloudH * 0.38, 0, 0, TWO_PI);
+        drawingContext.clip();
+
+        // Day title at top of cloud
+        textFont(fonts.title);
+        textSize(28);
+        textAlign(CENTER, CENTER);
+        stroke(0, 0, 0, 180); strokeWeight(5); fill(255, 105, 180);
+        text(recap.title, cloudX, cloudY - 200);
+        noStroke(); fill(255, 105, 180);
+        text(recap.title, cloudX, cloudY - 200);
+
+        // Story lines with scroll offset — more lines visible
+        textFont(fonts.body);
+        textSize(22);
+        textAlign(CENTER, CENTER);
+        let lineH = 32;
+        let startY = cloudY - 155;
+        let maxScroll = max(0, recap.lines.length - 10);
+        // Smooth scroll clamp
+        storyScrollOffset = constrain(storyScrollOffset, 0, maxScroll);
+
+        for (let j = 0; j < recap.lines.length; j++) {
+            let visibleIdx = j - storyScrollOffset;
+            let ly = startY + visibleIdx * lineH;
+            if (ly > cloudY - 220 && ly < cloudY + 210) {
+                let lineText = recap.lines[j];
+                if (lineText === "") continue;
+                // Fade lines near edges
+                let edgeFade = 255;
+                if (ly < cloudY - 170) edgeFade = map(ly, cloudY - 220, cloudY - 170, 0, 255);
+                if (ly > cloudY + 160) edgeFade = map(ly, cloudY + 160, cloudY + 210, 255, 0);
+                edgeFade = constrain(edgeFade, 0, 255);
+
+                stroke(0, 0, 0, edgeFade * 0.6); strokeWeight(3); fill(255, 240, 220, edgeFade);
+                text(lineText, cloudX, ly);
+                noStroke(); fill(255, 240, 220, edgeFade);
+                text(lineText, cloudX, ly);
+            }
+        }
+
+        drawingContext.restore();
+        pop();
+
+        // Scroll bar indicator below cloud
+        if (maxScroll > 0) {
+            let barW = 200, barH = 6;
+            let barX = cloudX - barW / 2;
+            let barY = cloudY + cloudH * 0.38 + 15;
+            noStroke();
+            fill(255, 255, 255, 40);
+            rect(barX, barY, barW, barH, 3);
+            let fillW = map(storyScrollOffset, 0, maxScroll, 20, barW);
+            fill(255, 215, 0, 150);
+            rect(barX, barY, fillW, barH, 3);
+        }
+    } else if (!isUnlocked) {
+        textFont(fonts.title);
+        textSize(28);
+        textAlign(CENTER, CENTER);
+        let pulse = sin(frameCount * 0.08) * 40 + 120;
+        stroke(0, 0, 0, 150); strokeWeight(4); fill(pulse, pulse * 0.6, pulse * 0.6);
+        text("REACH DAY " + storyRecapDay + " TO UNLOCK", cloudX, cloudY);
+        noStroke(); fill(pulse, pulse * 0.6, pulse * 0.6);
+        text("REACH DAY " + storyRecapDay + " TO UNLOCK", cloudX, cloudY);
+    }
+
+    // ── Right side: Up/Down arrows — change days (not scroll) ──
+    let arrowX = width - 100;
+    let arrowSz = 56;
+
+    if (assets.backImg) {
+        // Up arrow (previous day)
+        let canGoUp = storyRecapDay > 1;
+        let upHover = canGoUp && dist(mouseX, mouseY, arrowX, height / 2 - 80) < 35;
+        push();
+        translate(arrowX, height / 2 - 80);
+        rotate(HALF_PI);
+        if (!canGoUp) tint(255, 60);
+        if (upHover) scale(1.25);
+        imageMode(CENTER);
+        image(assets.backImg, 0, 0, arrowSz, arrowSz);
+        pop();
+
+        // Down arrow (next day)
+        let nextDay = storyRecapDay + 1;
+        let canGoDown = nextDay <= 5 && ((nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL));
+        let downHover = canGoDown && dist(mouseX, mouseY, arrowX, height / 2 + 80) < 35;
+        push();
+        translate(arrowX, height / 2 + 80);
+        rotate(-HALF_PI);
+        if (!canGoDown) tint(255, 60);
+        if (downHover) scale(1.25);
+        imageMode(CENTER);
+        image(assets.backImg, 0, 0, arrowSz, arrowSz);
+        pop();
+    }
+
+    // Day indicator between arrows
+    textFont(fonts.title); textSize(20);
+    textAlign(CENTER, CENTER);
+    stroke(0, 0, 0, 150); strokeWeight(3); fill(255, 215, 0);
+    text("DAY " + storyRecapDay, arrowX, height / 2);
+    noStroke(); fill(255, 215, 0);
+    text("DAY " + storyRecapDay, arrowX, height / 2);
+
+    // Scroll hint
+    textFont(fonts.body); textSize(14);
+    fill(200, 160, 255, 150);
+    text("SCROLL TO READ", arrowX, height / 2 + 140);
 }
