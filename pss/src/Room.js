@@ -27,26 +27,38 @@ class RoomScene {
         };
 
         // Desk interaction zone
-        this.deskX = 1085;
-        this.deskY = 430;
+        this.deskX         = 1085;
+        this.deskY         = 430;
         this.deskThreshold = 80;
-        this.deskBoxW = 115;
-        this.deskBoxH = 50;
+        this.deskBoxW      = 115;
+        this.deskBoxH      = 50;
 
         // Door interaction zone
-        this.doorX = 955;
-        this.doorY = 760;
+        this.doorX         = 955;
+        this.doorY         = 760;
         this.doorThreshold = 80;
-        this.doorBoxW = 60;
-        this.doorBoxH = 45;
+        this.doorBoxW      = 60;
+        this.doorBoxH      = 45;
 
         // Proximity flags used by the renderer and input handler
         this.isPlayerNearDesk = false;
         this.isPlayerNearDoor = false;
 
         // Timer for the "missing items" warning prompt (frames)
-        this.doorBlockTimer = 0;
+        this.doorBlockTimer   = 0;
         this.doorBlockMessage = "";
+
+        // Back arrow button — returns to level select
+        this.backButton = new UIButton(70, 65, 60, 60, "BACK_ARROW", () => {
+            triggerTransition(() => {
+                gameState.setState(STATE_LEVEL_SELECT);
+                if (mainMenu) {
+                    mainMenu.menuState = STATE_LEVEL_SELECT;
+                    mainMenu.timeWheel.bgAlpha = 0;
+                    mainMenu.timeWheel.triggerEntrance();
+                }
+            });
+        });
     }
 
     /**
@@ -60,7 +72,7 @@ class RoomScene {
         }
         this.isPlayerNearDesk = false;
         this.isPlayerNearDoor = false;
-        this.doorBlockTimer = 0;
+        this.doorBlockTimer   = 0;
         this.doorBlockMessage = "";
     }
 
@@ -87,9 +99,9 @@ class RoomScene {
      */
     getValidPosition(newX, newY, oldX, oldY) {
         let playerRadius = 20;
-        if (this.isWalkable(newX, newY, playerRadius)) return { x: newX, y: newY };
-        if (this.isWalkable(newX, oldY, playerRadius)) return { x: newX, y: oldY };
-        if (this.isWalkable(oldX, newY, playerRadius)) return { x: oldX, y: newY };
+        if (this.isWalkable(newX, newY, playerRadius))  return { x: newX, y: newY  };
+        if (this.isWalkable(newX, oldY, playerRadius))  return { x: newX, y: oldY  };
+        if (this.isWalkable(oldX, newY, playerRadius))  return { x: oldX, y: newY  };
         return { x: oldX, y: oldY };
     }
 
@@ -133,8 +145,8 @@ class RoomScene {
             }
             console.log("[RoomScene] Leaving room");
             if (typeof player !== 'undefined') {
-                player.x = GLOBAL_CONFIG.lanes.lane1;
-                player.y = PLAYER_RUN_FOOT_Y;  // Player foot anchor for day run
+                player.x = width / 2;
+                player.y = height - 200;
             }
             gameState.currentState = STATE_DAY_RUN;
             if (typeof playSFX !== 'undefined' && typeof sfxClick !== 'undefined') {
@@ -160,6 +172,13 @@ class RoomScene {
             background(80, 60, 100);
         }
 
+        // Dark overlay so text is readable
+        noStroke();
+        fill(0, 0, 0, 100);
+        rectMode(CORNER);
+        rect(0, 0, width, height);
+        imageMode(CORNER);
+
         // 2. Room sprite
         if (assets && assets.roomBg) {
             imageMode(CENTER);
@@ -174,7 +193,12 @@ class RoomScene {
         // 4. Door-blocked warning prompt
         this.drawDoorBlockedPrompt();
 
-        // 5. Developer overlay
+        // 5. Back arrow button (top-left)
+        this.backButton.isFocused = this.backButton.checkMouse(mouseX, mouseY);
+        this.backButton.update();
+        this.backButton.display();
+
+        // 6. Developer overlay
         this.drawRoomDevTools();
 
         pop();
@@ -189,7 +213,7 @@ class RoomScene {
         push();
 
         let target = this.isPlayerNearDesk
-            ? { label: "CHECK DESK", key: 'e', x: this.deskX, y: this.deskY, w: this.deskBoxW, h: this.deskBoxH }
+            ? { label: "CHECK DESK", key: 'e',     x: this.deskX, y: this.deskY, w: this.deskBoxW, h: this.deskBoxH }
             : { label: "LEAVE ROOM", key: 'enter', x: this.doorX, y: this.doorY, w: this.doorBoxW, h: this.doorBoxH };
 
         // Compute the top of the room image for the prompt anchor
@@ -222,7 +246,7 @@ class RoomScene {
         if (assets.keys && assets.keys[target.key]) {
             let sheet = assets.keys[target.key];
             let frame = floor(frameCount / 15) % 3;
-            let sw = sheet.width / 3;
+            let sw    = sheet.width / 3;
             imageMode(CENTER);
             tint(255, 200 + pulse * 55);
             image(sheet, width / 2, roomTopY - 60, 50, 40, frame * sw, 0, sw, sheet.height);
@@ -258,7 +282,7 @@ class RoomScene {
         strokeWeight(2);
         rectMode(CORNERS);
         rect(this.walkableArea.minX, this.walkableArea.minY, this.walkableArea.maxX, this.walkableArea.maxY);
-        rect(this.carpetArea.minX, this.carpetArea.minY, this.carpetArea.maxX, this.carpetArea.maxY);
+        rect(this.carpetArea.minX,   this.carpetArea.minY,   this.carpetArea.maxX,   this.carpetArea.maxY);
         pop();
     }
 

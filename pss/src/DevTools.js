@@ -10,14 +10,14 @@
  * true  → skips loading/splash, shows collision boxes and dev HUD.
  * false → normal game flow.
  */
-let developerMode = true;
+let developerMode = false;
 
 /**
  * Bypass day-lock checks in the level-select screen.
  * true  → all days are always selectable regardless of progress.
  * false → only unlocked days are selectable.
  */
-const DEBUG_UNLOCK_ALL = true;
+const DEBUG_UNLOCK_ALL = false;
 
 /**
  * Which scene to jump to immediately on startup (only active when developerMode = true).
@@ -34,8 +34,63 @@ const DEBUG_PLAYER_Y = 550;
 /**
  * Day ID to load when jumping directly into a run (DEBUG_START_STATE = STATE_DAY_RUN).
  */
-const DEBUG_DAY_ID = 2;
+const DEBUG_DAY_ID = 1;
 
+// ─── STORY RECAP ─────────────────────────────────────────────────────
+/**
+ * Developer flag to show the story recap screen.
+ */
+const DEBUG_STORY_RECAP = true;
+
+/**
+ * Developer data for the story recap screen. Adjusts the position and size of the recap elements.
+ */
+let storyDebugData = {
+    shape: {
+        x: 0,
+        y: 0,
+        w: 1920,
+        h: 1080,
+        alpha: 255
+    },
+    cloud: {
+        x: 0,
+        y: 0,
+        w: 900,
+        h: 600,
+        alpha: 255
+    },
+    textArea: {
+        x: 960,
+        y: 540,
+        w: 700,
+        h: 500
+    }
+};
+
+/**
+ * Developer flag to show on-screen controls for adjusting the story recap layout in real-time.
+ */
+let showStoryDebugControls = false;
+
+/**
+ * Enters the story recap debug mode, allowing real-time adjustments of the recap layout.
+ */
+function devGoToStoryRecap() {
+    console.log("[DEV] Entering STORY RECAP debug mode");
+    gameState.currentState = STATE_PAUSED;
+    gameState.previousState = STATE_MENU; // 设置一个安全的 previousState
+    showStoryRecap = true;
+    storyRecapDay = 1;
+    storyScrollOffset = 0;
+    pauseIndex = -1;
+    showStoryDebugControls = true;
+    
+    console.log("[DEV] Story Debug Controls activated");
+    console.log("[DEV] Press 'C' to toggle control panel");
+    console.log("[DEV] Use arrow keys + SHIFT to adjust selected layer");
+    console.log("[DEV] Press '1' for Shape, '2' for Cloud, '3' for Text Area");
+}
 
 // ─── RUNTIME TOGGLE ──────────────────────────────────────────────────────────
 
@@ -74,18 +129,14 @@ function setupRoomTestMode() {
  */
 function setupRunTestMode() {
     console.log(`[DEV] Entering DAY_RUN directly (Day ${DEBUG_DAY_ID})`);
+    currentDayID = DEBUG_DAY_ID;
     if (player) player.applyLevelStats(DEBUG_DAY_ID);
     if (player) {
-        player.x = GLOBAL_CONFIG.lanes.lane1;
-        player.y = PLAYER_RUN_FOOT_Y;
+        player.x = 500;
+        player.y = height / 2;
     }
-    if (obstacleManager) obstacleManager = new ObstacleManager();
-
-    // Initialize the level controller to load backgrounds and apply difficulty
-    if (levelController) {
-        levelController.initializeLevel(DEBUG_DAY_ID);
-    }
-
+    obstacleManager = new ObstacleManager();
+    if (levelController) levelController.initializeLevel(DEBUG_DAY_ID);
     gameState.currentState = STATE_DAY_RUN;
 }
 
@@ -139,6 +190,13 @@ function devRefillHealth() {
 function devApplyStartupSkip() {
     console.log(`[DEV] Startup skip → ${DEBUG_START_STATE}`);
     gameState.currentState = DEBUG_START_STATE;
+
+    if (DEBUG_STORY_RECAP) {
+        setTimeout(() => {
+            devGoToStoryRecap();
+        }, 100);
+        return;
+    }
 
     if (DEBUG_START_STATE === STATE_ROOM) {
         setupRoomTestMode();

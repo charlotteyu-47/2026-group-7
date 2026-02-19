@@ -4,6 +4,7 @@
 // ─── GLOBAL SYSTEM INSTANCES ─────────────────────────────────────────────────
 let gameState, mainMenu, roomScene, inventory, env, player, obstacleManager, levelController;
 let backpackUI;
+let endScreenManager;
 
 // ─── GAME PROGRESS STATE ─────────────────────────────────────────────────────
 let currentUnlockedDay = 1;
@@ -23,8 +24,8 @@ let assets = {
     playerAnim: {
         north: [],
         south: [],
-        west: [],
-        east: []
+        west:  [],
+        east:  []
     }
 };
 let fonts = {};
@@ -33,6 +34,11 @@ let bgm, sfxSelect, sfxClick;
 // ─── AUDIO VOLUME CONTROLS ───────────────────────────────────────────────────
 let masterVolumeBGM = 0.25;
 let masterVolumeSFX = 0.7;
+
+// ─── DIFFICULTY SETTING ──────────────────────────────────────────────────────
+// 0 = EASY (locked), 1 = NORMAL (default), 2 = HARD (locked)
+let gameDifficulty = 1;
+const DIFFICULTY_LABELS = ["EASY", "NORMAL", "HARD"];
 
 // ─── GLOBAL FADE TRANSITION CONTROLLER ───────────────────────────────────────
 // Drives a 0.3s fade-in / fade-out overlay across all scene transitions.
@@ -45,9 +51,29 @@ let globalFade = {
 };
 
 // ─── PAUSE MENU STATE ─────────────────────────────────────────────────────────
-let pauseIndex = 0;
-const PAUSE_OPTIONS = ["RESUME", "HELP", "QUIT TO MENU"];
+let pauseIndex = -1;  // -1 = no selection (nothing highlighted by default)
 let pauseFromState = null;
+
+// Pause options vary by context (room vs day-run)
+function getPauseOptions() {
+    if (gameState && gameState.previousState === STATE_DAY_RUN) {
+        return ["RESTART","SETTINGS", "STORY", "HELP", "EXIT"];
+    }
+    return ["SETTINGS", "STORY", "HELP", "EXIT"];
+}
+
+// Restart sub-menu state
+let showRestartChoice = false;
+let restartChoiceIndex = 0;
+const RESTART_OPTIONS = ["BACK TO ROOM", "RESTART RUN"];
+
+// Pause button breathing scale (smooth lerp)
+let pauseBtnScale = 1.0;
+
+// Story recap state
+let showStoryRecap = false;
+let storyRecapDay = 1;
+let storyScrollOffset = 0;  // scroll offset within current day's text
 
 // ─── SPLASH LOGO ANIMATION STATE ─────────────────────────────────────────────
 let titleDrop = { y: -200, vy: 0, landed: false, shake: 0 };
@@ -55,20 +81,20 @@ let titleDrop = { y: -200, vy: 0, landed: false, shake: 0 };
 // ─── ITEM ENCYCLOPEDIA ───────────────────────────────────────────────────────
 const ITEM_WIKI = [
     // BUFFS (Help Page 2)
-    { name: 'COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'coffee', type: 'BUFF' },
-    { name: 'MOTORCYCLE', desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'motorcycle', type: 'BUFF' },
-    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 2, imgKey: 'coffee', type: 'BUFF' },
-    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 3, imgKey: 'coffee', type: 'BUFF' },
-    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 4, imgKey: 'coffee', type: 'BUFF' },
-    { name: 'HOT COFFEE', desc: 'INSTANT ENERGY +20', unlockDay: 5, imgKey: 'coffee', type: 'BUFF' },
+    { name: 'COFFEE',      desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'MOTORCYCLE',  desc: 'INSTANT ENERGY +20', unlockDay: 1, imgKey: 'motorcycle',                  type: 'BUFF'   },
+    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 2, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 3, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 4, imgKey: 'coffee',                      type: 'BUFF'   },
+    { name: 'HOT COFFEE',  desc: 'INSTANT ENERGY +20', unlockDay: 5, imgKey: 'coffee',                      type: 'BUFF'   },
 
     // HAZARDS (Help Page 3)
-    { name: 'HEAVY TRAFFIC', desc: 'DANGER: INSTANT FAIL', unlockDay: 1, imgKey: ['ambulance', 'bus'], type: 'HAZARD' },
-    { name: 'LIGHT TRAFFIC', desc: 'SPACE OBSTACLE: BLOCKS PATH.', unlockDay: 1, imgKey: ['car_brown', 'car_red'], type: 'HAZARD' },
-    { name: 'HOMELESS', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 1, imgKey: 'homeless', type: 'HAZARD' },
-    { name: 'PROMOTER', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 1, imgKey: 'promoter', type: 'HAZARD' },
-    { name: 'SCOOTER RIDER', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 1, imgKey: 'scooter_rider', type: 'HAZARD' },
-    { name: 'PADDLE', desc: 'TRIPS PLAYER: SLOW DOWN', unlockDay: 4, imgKey: 'scooter_rider', type: 'HAZARD' }
+    { name: 'HEAVY TRAFFIC',  desc: 'Immediately fail upon collision.',           unlockDay: 1, imgKey: ['ambulance', 'bus'],       type: 'HAZARD' },
+    { name: 'LIGHT TRAFFIC',  desc: 'Causes player to lose health.',              unlockDay: 1, imgKey: ['car_brown', 'car_red'],   type: 'HAZARD' },
+    { name: 'HOMELESS',       desc: 'Forces immediate lane change.',              unlockDay: 1, imgKey: 'homeless',                type: 'HAZARD' },
+    { name: 'PROMOTER',       desc: 'A flyer that blocks the Iris\'s view.',      unlockDay: 1, imgKey: 'promoter',                type: 'HAZARD' },
+    { name: 'SCOOTER RIDER',  desc: 'Causes temporary stun.',                     unlockDay: 1, imgKey: 'scooter_rider',           type: 'HAZARD' },
+    { name: 'PADDLE',         desc: '...',                                        unlockDay: 4, imgKey: 'scooter_rider',           type: 'HAZARD' }
 ];
 
 // ─── ASSET LOADING TRACKER ───────────────────────────────────────────────────
@@ -76,7 +102,7 @@ let isLoaded = false;
 let loadProgress = 0;
 let smoothProgress = 0;
 let assetsLoadedCount = 0;
-const totalAssetsToLoad = 29;
+const totalAssetsToLoad = 36;
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,16 +123,23 @@ function itemLoaded() {
  */
 function preload() {
     // Visual assets
-    assets.menuBg = loadImage('assets/cbg.png', itemLoaded);
-    assets.otherBg = loadImage('assets/other_bg.png', itemLoaded);
-    assets.roomBg = loadImage('assets/room.png', itemLoaded);
-    assets.inventoryBg = loadImage('assets/inventory/table.png', itemLoaded);
-    assets.backpackImg = loadImage('assets/inventory/backpack.png', itemLoaded);
+    assets.menuBg      = loadImage('assets/cbg.png', itemLoaded);
+    assets.otherBg     = loadImage('assets/other_bg.png', itemLoaded);
+    assets.libraryBg   = loadImage('assets/background/library.jpg', itemLoaded);
+    assets.bbg         = loadImage('assets/bbg.png', itemLoaded);
+    assets.roomBg      = loadImage('assets/room.png', itemLoaded);
+    assets.inventoryBg    = loadImage('assets/inventory/table.png', itemLoaded);
+    assets.backpackImg    = loadImage('assets/inventory/backpack.png', itemLoaded);
     assets.studentCardImg = loadImage('assets/inventory/student_card.png', itemLoaded);
-    assets.computerImg = loadImage('assets/inventory/computer.png', itemLoaded);
+    assets.computerImg    = loadImage('assets/inventory/computer.png', itemLoaded);
 
     assets.selectBg.unlock = loadImage('assets/select_background/day_unlock.jpg', itemLoaded);
-    assets.selectBg.lock = loadImage('assets/select_background/day_lock.jpg', itemLoaded);
+    assets.selectBg.lock   = loadImage('assets/select_background/day_lock.jpg', itemLoaded);
+
+    // Story recap assets
+    assets.storyShape = loadImage('assets/story/frame_shape.png', itemLoaded);
+    assets.storyCloud = loadImage('assets/story/frame_cloud.png', itemLoaded);
+
 
     for (let i = 1; i <= 5; i++) {
         assets.selectClouds.push(loadImage(`assets/select_cloud/Cloud-${i}.png`, itemLoaded));
@@ -114,29 +147,29 @@ function preload() {
 
     // Typography
     fonts.title = loadFont('assets/fonts/PressStart2P-Regular.ttf', itemLoaded);
-    fonts.time = loadFont('assets/fonts/VT323-Regular.ttf', itemLoaded);
-    fonts.body = loadFont('assets/fonts/DotGothic16-Regular.ttf', itemLoaded);
-    fonts.logo = loadFont('assets/fonts/title_1.otf', itemLoaded);
+    fonts.time  = loadFont('assets/fonts/VT323-Regular.ttf', itemLoaded);
+    fonts.body  = loadFont('assets/fonts/DotGothic16-Regular.ttf', itemLoaded);
+    fonts.logo  = loadFont('assets/fonts/title_1.otf', itemLoaded);
 
     // Audio
     soundFormats('mp3', 'wav');
-    bgm = loadSound('assets/audio/music/MainTheme.mp3', itemLoaded);
+    bgm       = loadSound('assets/audio/music/MainTheme.mp3', itemLoaded);
     sfxSelect = loadSound('assets/audio/effects/Select.wav', itemLoaded);
-    sfxClick = loadSound('assets/audio/effects/Click.wav', itemLoaded);
+    sfxClick  = loadSound('assets/audio/effects/Click.wav', itemLoaded);
 
     // Control key sprites
-    assets.keys.w = loadImage('assets/control_keys/W.png', itemLoaded);
-    assets.keys.a = loadImage('assets/control_keys/A.png', itemLoaded);
-    assets.keys.s = loadImage('assets/control_keys/S.png', itemLoaded);
-    assets.keys.d = loadImage('assets/control_keys/D.png', itemLoaded);
-    assets.keys.up = loadImage('assets/control_keys/ARROWUP.png', itemLoaded);
-    assets.keys.down = loadImage('assets/control_keys/ARROWDOWN.png', itemLoaded);
-    assets.keys.left = loadImage('assets/control_keys/ARROWLEFT.png', itemLoaded);
+    assets.keys.w     = loadImage('assets/control_keys/W.png', itemLoaded);
+    assets.keys.a     = loadImage('assets/control_keys/A.png', itemLoaded);
+    assets.keys.s     = loadImage('assets/control_keys/S.png', itemLoaded);
+    assets.keys.d     = loadImage('assets/control_keys/D.png', itemLoaded);
+    assets.keys.up    = loadImage('assets/control_keys/ARROWUP.png', itemLoaded);
+    assets.keys.down  = loadImage('assets/control_keys/ARROWDOWN.png', itemLoaded);
+    assets.keys.left  = loadImage('assets/control_keys/ARROWLEFT.png', itemLoaded);
     assets.keys.right = loadImage('assets/control_keys/ARROWRIGHT.png', itemLoaded);
     assets.keys.enter = loadImage('assets/control_keys/ENTER.png', itemLoaded);
     assets.keys.space = loadImage('assets/control_keys/SPACE.png', itemLoaded);
-    assets.keys.e = loadImage('assets/control_keys/E.png', itemLoaded);
-    assets.keys.p = loadImage('assets/control_keys/P.png', itemLoaded);
+    assets.keys.e     = loadImage('assets/control_keys/E.png', itemLoaded);
+    assets.keys.p     = loadImage('assets/control_keys/P.png', itemLoaded);
 
     // Logo frames
     assets.logoImgs = [
@@ -149,45 +182,38 @@ function preload() {
 
     assets.uobLogo = loadImage('assets/logo/uob_logo.png', itemLoaded);
 
+    // UI button sprites
+    assets.btnImg   = loadImage('assets/buttons/button.png', itemLoaded);
+    assets.backImg  = loadImage('assets/buttons/back.png', itemLoaded);
+    assets.pauseImg = loadImage('assets/buttons/pause.png', itemLoaded);
+
     // Entity preview sprites (no progress tracking — non-critical)
     if (!assets.previews) assets.previews = {};
-    assets.previews['player'] = loadImage('assets/characters/wiki/Iris.png');
-    assets.previews['npc_1'] = loadImage('assets/characters/wiki/Wiola.png');
-    assets.previews['ambulance'] = loadImage('assets/obstacles/obstacle_ambulance.png');
-    assets.previews['bus'] = loadImage('assets/obstacles/obstacle_bus.png');
-    assets.previews['car_brown'] = loadImage('assets/obstacles/obstacle_car_brown.png');
-    assets.previews['car_red'] = loadImage('assets/obstacles/obstacle_car_red.png');
-    assets.previews['homeless'] = loadImage('assets/obstacles/obstacle_homeless.png');
-    assets.previews['promoter'] = loadImage('assets/obstacles/obstacle_promoter.png');
-    assets.previews['scooter_rider'] = loadImage('assets/obstacles/obstacle_scooter.png');
-    assets.previews['coffee'] = loadImage('assets/power_up/powerup_coffee.png');
-    assets.previews['motorcycle'] = loadImage('assets/power_up/powerup_motorcycle.png');
+    assets.previews['player']        = loadImage('assets/characters/wiki/Iris.png');
+    assets.previews['npc_1']         = loadImage('assets/characters/wiki/Wiola.png');
+    assets.previews['ambulance']     = loadImage('assets/obstacles/ambulance.png');
+    assets.previews['bus']           = loadImage('assets/obstacles/bus.png');
+    assets.previews['car_brown']     = loadImage('assets/obstacles/car_brown.png');
+    assets.previews['car_red']       = loadImage('assets/obstacles/car_red.png');
+    assets.previews['homeless']      = loadImage('assets/obstacles/homeless.png');
+    assets.previews['promoter']      = loadImage('assets/obstacles/promoter.png');
+    assets.previews['scooter_rider'] = loadImage('assets/obstacles/scooter_rider.png');
+    assets.previews['coffee']        = loadImage('assets/power_up/coffee.png');
+    assets.previews['motorcycle']    = loadImage('assets/power_up/motorcycle.png');
 
-    // Player directional frame animation (uses authored frame PNGs directly)
+    // Player directional animation spritesheets
     assets.playerAnim = {};
     const dirs = ['north', 'south', 'west', 'east'];
-    const frameFilesByDir = {
-        north: ['frame_1.png', 'frame_2.png', 'frame_3.png', 'frame_4.png', 'frame_5.png'],
-        south: ['frame_1.png', 'frame_2.png', 'frame_3.png', 'frame_4.png', 'frame_5.png'],
-        west: ['frame_001.png', 'frame_002.png', 'frame_003.png', 'frame_004.png', 'frame_005.png'],
-        east: ['frame_001.png', 'frame_002.png', 'frame_003.png', 'frame_004.png', 'frame_005.png']
-    };
-
     dirs.forEach(d => {
         assets.playerAnim[d] = { walk: [], idle: null };
-
-        frameFilesByDir[d].forEach((fileName) => {
-            const path = `assets/characters/sprite_frames/${d}/${fileName}`;
-            const frameImg = loadImage(path);
-            assets.playerAnim[d].walk.push(frameImg);
+        assets.playerAnim[d].idle = loadImage(`assets/characters/spritesheet/${d}.png`);
+        loadImage(`assets/characters/spritesheet/spritesheet_${d}.png`, (img) => {
+            let fw = img.width / 5;
+            let fh = img.height;
+            for (let i = 0; i < 5; i++) {
+                assets.playerAnim[d].walk.push(img.get(i * fw, 0, fw, fh));
+            }
         });
-
-        // Keep dedicated idle if present; fallback to first run frame.
-        assets.playerAnim[d].idle = loadImage(
-            `assets/characters/spritesheet/${d}.png`,
-            () => { },
-            () => { assets.playerAnim[d].idle = assets.playerAnim[d].walk[0]; }
-        );
     });
 }
 
@@ -204,15 +230,16 @@ function setup() {
     cvs.parent('canvas-container');
     noSmooth();
 
-    gameState = new GameState();
-    mainMenu = new MainMenu();
-    roomScene = new RoomScene();
-    inventory = new InventorySystem();
-    env = new Environment();
-    player = new Player();
+    gameState       = new GameState();
+    mainMenu        = new MainMenu();
+    roomScene       = new RoomScene();
+    inventory       = new InventorySystem();
+    env             = new Environment();
+    player          = new Player();
     obstacleManager = new ObstacleManager();
-    backpackUI = new BackpackVisual(inventory, roomScene);
-    levelController = new LevelController();
+    backpackUI      = new BackpackVisual(inventory, roomScene);
+    levelController  = new LevelController();
+    endScreenManager = new EndScreenManager();
 
     textFont(fonts.body);
     gameState.currentState = STATE_LOADING;
@@ -277,8 +304,15 @@ function draw() {
                 break;
 
             case STATE_FAIL:
+                // Draw frozen gameplay behind the overlay
+                if (env) env.display();
+                if (obstacleManager) obstacleManager.display();
+                if (player) player.display();
+                if (endScreenManager) endScreenManager.display();
+                break;
+
             case STATE_WIN:
-                drawEndScreen();
+                if (endScreenManager) endScreenManager.display();
                 break;
         }
     } catch (e) {
@@ -293,10 +327,9 @@ function draw() {
  */
 function runGameLoop() {
     if (levelController) { levelController.update(); }
-    if (env) { env.update(GLOBAL_CONFIG.scrollSpeed); env.display(); }
-    const levelPhase = levelController ? levelController.getLevelPhase() : "RUNNING";
-    if (obstacleManager) { obstacleManager.update(GLOBAL_CONFIG.scrollSpeed, player, levelPhase); obstacleManager.display(); }
-    if (player) { player.update(); player.display(); }
+    if (env)             { env.update(GLOBAL_CONFIG.scrollSpeed); env.display(); }
+    if (obstacleManager) { obstacleManager.update(GLOBAL_CONFIG.scrollSpeed, player); obstacleManager.display(); }
+    if (player)          { player.update(); player.display(); }
     if (levelController) { levelController.display(); }
 
     // Win condition: settlement point reached
@@ -333,8 +366,8 @@ function playSFX(sound) {
 function triggerTransition(onBlackout) {
     if (globalFade.isFading) return;
     globalFade.isFading = true;
-    globalFade.dir = 1;
-    globalFade.alpha = 0;
+    globalFade.dir      = 1;
+    globalFade.alpha    = 0;
     globalFade.callback = onBlackout;
 }
 
@@ -353,7 +386,7 @@ function renderGlobalFade() {
         globalFade.dir = -1;
     }
     if (globalFade.dir === -1 && globalFade.alpha <= 0) {
-        globalFade.alpha = 0;
+        globalFade.alpha    = 0;
         globalFade.isFading = false;
         globalFade.callback = null;
     }
@@ -380,34 +413,120 @@ function keyPressed() {
     // Toggle developer mode
     if (key === '0') devToggle();
 
-    // Pause / unpause — available in most gameplay states
-    if (key === 'p' || key === 'P' || keyCode === ESCAPE) {
+    // Dev shortcuts: 8 = instant WIN, 9 = instant FAIL
+    if (developerMode) {
+        if (key === '8') { devGoToWin();  return; }
+        if (key === '9') { devGoToFail("EXHAUSTED"); return; }
+    }
+
+    // Pause / unpause — available in most gameplay states (but NOT while already paused)
+    if ((key === 'p' || key === 'P' || keyCode === ESCAPE) && state !== STATE_PAUSED) {
         if (state !== STATE_MENU && state !== STATE_LEVEL_SELECT &&
             state !== STATE_SETTINGS && state !== STATE_HELP &&
-            state !== STATE_SPLASH && state !== STATE_INVENTORY) {
+            state !== STATE_SPLASH && state !== STATE_INVENTORY &&
+            state !== STATE_FAIL && state !== STATE_WIN) {
             playSFX(sfxClick);
             togglePause();
-            // If we just resumed (left STATE_PAUSED), clear the pause-origin tracker
-            if (gameState.currentState !== STATE_PAUSED) {
-                pauseFromState = null;
-            }
-            pauseIndex = 0;
+            pauseIndex = -1;
+            showRestartChoice = false;
+            showStoryRecap = false;
             return;
         }
     }
 
     // Pause menu navigation
     if (state === STATE_PAUSED) {
-        if (keyCode === UP_ARROW || keyCode === 87 || keyCode === DOWN_ARROW || keyCode === 83) {
-            playSFX(sfxSelect);
+        if (showStoryRecap) {
+            // Story recap: UP/DOWN or W/S scroll content within the day
             if (keyCode === UP_ARROW || keyCode === 87) {
-                pauseIndex = (pauseIndex - 1 + PAUSE_OPTIONS.length) % PAUSE_OPTIONS.length;
-            } else {
-                pauseIndex = (pauseIndex + 1) % PAUSE_OPTIONS.length;
+                if (storyScrollOffset <= 0 && storyRecapDay > 1) {
+                    // Auto-retreat to previous day
+                    storyRecapDay--;
+                    let prevRecap = STORY_RECAPS[storyRecapDay];
+                    storyScrollOffset = max(0, prevRecap.lines.length - 10);
+                } else {
+                    storyScrollOffset = max(0, storyScrollOffset - 1);
+                }
+                if (typeof playSFX === 'function') playSFX(sfxSelect);
+            } else if (keyCode === DOWN_ARROW || keyCode === 83) {
+                let recap = STORY_RECAPS[storyRecapDay];
+                if (recap) {
+                    let maxScroll = max(0, recap.lines.length - 10);
+                    if (storyScrollOffset >= maxScroll) {
+                        // Auto-advance to next day
+                        let nextDay = storyRecapDay + 1;
+                        let isNextUnlocked = (nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                        if (nextDay <= 5 && isNextUnlocked) {
+                            storyRecapDay = nextDay;
+                            storyScrollOffset = 0;
+                        }
+                    } else {
+                        storyScrollOffset = min(maxScroll, storyScrollOffset + 1);
+                    }
+                }
+                if (typeof playSFX === 'function') playSFX(sfxSelect);
+            } else if (keyCode === LEFT_ARROW || keyCode === 65) {
+                // Change to previous day
+                if (storyRecapDay > 1) {
+                    storyRecapDay--;
+                    storyScrollOffset = 0;
+                    if (typeof playSFX === 'function') playSFX(sfxSelect);
+                }
+            } else if (keyCode === RIGHT_ARROW || keyCode === 68) {
+                // Change to next day
+                let nextDay = storyRecapDay + 1;
+                let isNextUnlocked = (nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                if (nextDay <= 5 && isNextUnlocked) {
+                    storyRecapDay = nextDay;
+                    storyScrollOffset = 0;
+                    if (typeof playSFX === 'function') playSFX(sfxSelect);
+                }
+            } else if (keyCode === ESCAPE) {
+                showStoryRecap = false;
+                pauseIndex = -1;
             }
-        } else if (keyCode === ENTER || keyCode === 13) {
-            playSFX(sfxClick);
-            handlePauseSelection();
+            return;
+        } else if (showRestartChoice) {
+            // Restart sub-menu navigation
+            if (keyCode === UP_ARROW || keyCode === 87 || keyCode === DOWN_ARROW || keyCode === 83) {
+                if (typeof playSFX === 'function') playSFX(sfxSelect);
+                if (restartChoiceIndex < 0) {
+                    restartChoiceIndex = 0;
+                } else {
+                    restartChoiceIndex = (restartChoiceIndex + 1) % RESTART_OPTIONS.length;
+                }
+            } else if ((keyCode === ENTER || keyCode === 13) && restartChoiceIndex >= 0) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                handleRestartChoice();
+            } else if (keyCode === ESCAPE) {
+                showRestartChoice = false;
+                pauseIndex = -1;
+            }
+        } else {
+            let options = getPauseOptions();
+            if (keyCode === UP_ARROW || keyCode === 87 || keyCode === DOWN_ARROW || keyCode === 83) {
+                if (typeof playSFX === 'function') playSFX(sfxSelect);
+                
+                if (pauseIndex < 0) {
+                    if (keyCode === UP_ARROW || keyCode === 87) {
+                        pauseIndex = options.length - 1;
+                    } else {
+                        pauseIndex = 0;
+                    }
+                } else if (keyCode === UP_ARROW || keyCode === 87) {
+                    pauseIndex = (pauseIndex - 1 + options.length) % options.length;
+                } else {
+                    pauseIndex = (pauseIndex + 1) % options.length;
+                }
+            } else if ((keyCode === ENTER || keyCode === 13) && pauseIndex >= 0) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                handlePauseSelection();
+            } else if (keyCode === ESCAPE) {
+                // Back arrow behavior: resume from pause
+                togglePause();
+                pauseFromState = null;
+                showStoryRecap = false;
+            }
         }
         return;
     }
@@ -421,12 +540,9 @@ function keyPressed() {
     else if (state === STATE_ROOM) {
         if (roomScene) roomScene.handleKeyPress(keyCode);
     }
-    // Retry from end screen
+    // End screen navigation (fail / win)
     else if (state === STATE_FAIL || state === STATE_WIN) {
-        if (keyCode === ENTER || keyCode === 13) {
-            playSFX(sfxClick);
-            setupRun(currentDayID);
-        }
+        if (endScreenManager) endScreenManager.handleKeyPress(keyCode);
     }
 
     // Close inventory with ESC
@@ -440,19 +556,64 @@ function keyPressed() {
  * Executes the selected option in the pause menu.
  */
 function handlePauseSelection() {
-    if (PAUSE_OPTIONS[pauseIndex] === "RESUME") {
+    let options = getPauseOptions();
+    let selected = options[pauseIndex];
+
+    if (selected === "RESUME") {
         togglePause();
-        pauseFromState = null;
-    } else if (PAUSE_OPTIONS[pauseIndex] === "HELP") {
+    } else if (selected === "STORY") {
+        showStoryRecap = true;
+        storyRecapDay = 1;
+        storyScrollOffset = 0;
+    } else if (selected === "SETTINGS") {
         pauseFromState = gameState.previousState;
-        playSFX(sfxClick);
+        if (typeof playSFX === 'function') playSFX(sfxClick);
+        gameState.currentState = STATE_SETTINGS;
+        mainMenu.menuState     = STATE_SETTINGS;
+    } else if (selected === "HELP") {
+        pauseFromState         = gameState.previousState;
+        if (typeof playSFX === 'function') playSFX(sfxClick);
         gameState.currentState = STATE_HELP;
-        mainMenu.menuState = STATE_HELP;
-        mainMenu.helpPage = 0;
-    } else if (PAUSE_OPTIONS[pauseIndex] === "QUIT TO MENU") {
+        mainMenu.menuState     = STATE_HELP;
+        mainMenu.helpPage      = 0;
+    } else if (selected === "QUIT TO MENU") {
         triggerTransition(() => {
             gameState.setState(STATE_MENU);
             mainMenu.menuState = STATE_MENU;
+            pauseFromState     = null;
+            if (typeof showRestartChoice !== 'undefined') showRestartChoice = false;
+            if (typeof showStoryRecap !== 'undefined') showStoryRecap = false;
+        });
+    } else if (selected === "RESTART") {
+        if (typeof showRestartChoice !== 'undefined') {
+            showRestartChoice   = true;
+            restartChoiceIndex  = -1;
+        } else {
+            triggerTransition(() => {
+                gameState.resetFlags();
+                setupRun(currentDayID);
+            });
+        }
+    }
+}
+
+function handleRestartChoice() {
+    if (RESTART_OPTIONS[restartChoiceIndex] === "BACK TO ROOM") {
+        triggerTransition(() => {
+            showRestartChoice = false;
+            gameState.setState(STATE_ROOM);
+            if (roomScene) roomScene.reset();
+            pauseFromState = null;
+        });
+    } else if (RESTART_OPTIONS[restartChoiceIndex] === "RESTART RUN") {
+        triggerTransition(() => {
+            showRestartChoice = false;
+            player.applyLevelStats(currentDayID);
+            player.x = 500;
+            player.y = height / 2;
+            obstacleManager = new ObstacleManager();
+            levelController.initializeLevel(currentDayID);
+            gameState.setState(STATE_DAY_RUN);
             pauseFromState = null;
         });
     }
@@ -462,7 +623,7 @@ function handlePauseSelection() {
  * Dispatches mouse press events; also unlocks the Web Audio context on first click.
  */
 function mousePressed() {
-    if (globalFade.isFading || !gameState) return;
+    if (globalFade.isFading) return;
     let state = gameState.currentState;
 
     // Splash screen: unlock audio and transition to main menu
@@ -477,16 +638,159 @@ function mousePressed() {
         return;
     }
 
+    if (state === STATE_PAUSED) {
+        if (assets.backImg) {
+            let bx = 70, by = 65;
+            if (dist(mouseX, mouseY, bx, by) < 40) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                
+                if (typeof showStoryRecap !== 'undefined' && showStoryRecap) {
+                    showStoryRecap = false;
+                    pauseIndex = -1;
+                } else if (typeof showRestartChoice !== 'undefined' && showRestartChoice) {
+                    showRestartChoice = false;
+                    pauseIndex = -1;
+                } else {
+                    togglePause();
+                }
+                return;
+            }
+        }
+        
+        if (typeof showRestartChoice !== 'undefined' && showRestartChoice) {
+            if (typeof restartChoiceIndex !== 'undefined' && restartChoiceIndex >= 0) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                handleRestartChoice();
+            }
+        } else if (!showStoryRecap) {
+            if (pauseIndex >= 0) {
+                if (typeof playSFX === 'function') playSFX(sfxClick);
+                handlePauseSelection();
+            }
+        }
+        return;
+    }
+
     if (state === STATE_MENU || state === STATE_LEVEL_SELECT ||
         state === STATE_SETTINGS || state === STATE_HELP) {
         if (mainMenu) mainMenu.handleClick(mouseX, mouseY);
-    } else if (state === STATE_ROOM || state === STATE_DAY_RUN) {
+    } else if (state === STATE_PAUSED) {
+        if (showStoryRecap) {
+            // Story recap clicks
+            // Back arrow → close story recap
+            if (dist(mouseX, mouseY, 70, 65) < 40) {
+                playSFX(sfxClick);
+                showStoryRecap = false;
+                return;
+            }
+            // Day sidebar click (left side, skewed cards)
+            let sidebarAnchorX = width * 0.12;
+            let sidebarBaseY = height * 0.45;
+            for (let i = 0; i < 5; i++) {
+                let diff = i - (storyRecapDay - 1);
+                let cardY = sidebarBaseY + diff * 130;
+                if (mouseX > sidebarAnchorX - 120 && mouseX < sidebarAnchorX + 120 &&
+                    mouseY > cardY - 40 && mouseY < cardY + 40) {
+                    let day = i + 1;
+                    let isUnlocked = (day <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                    if (isUnlocked) {
+                        storyRecapDay = day;
+                        storyScrollOffset = 0;
+                        playSFX(sfxSelect);
+                    }
+                    return;
+                }
+            }
+            // Up/Down arrow click (right side) — change days
+            let arrowX = width - 100;
+            if (dist(mouseX, mouseY, arrowX, height / 2 - 80) < 35) {
+                if (storyRecapDay > 1) {
+                    storyRecapDay--;
+                    storyScrollOffset = 0;
+                    playSFX(sfxSelect);
+                }
+                return;
+            }
+            if (dist(mouseX, mouseY, arrowX, height / 2 + 80) < 35) {
+                let nextDay = storyRecapDay + 1;
+                let isNextUnlocked = (nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                if (nextDay <= 5 && isNextUnlocked) {
+                    storyRecapDay = nextDay;
+                    storyScrollOffset = 0;
+                    playSFX(sfxSelect);
+                }
+                return;
+            }
+        } else if (showRestartChoice) {
+            // Restart sub-menu click (larger hit area)
+            let optW = 280, optH = 80;
+            for (let i = 0; i < RESTART_OPTIONS.length; i++) {
+                let ox = width / 2;
+                let oy = height / 2 + 20 + i * 80;
+                if (mouseX > ox - optW / 2 && mouseX < ox + optW / 2 &&
+                    mouseY > oy - optH / 2 && mouseY < oy + optH / 2) {
+                    restartChoiceIndex = i;
+                    playSFX(sfxClick);
+                    handleRestartChoice();
+                    return;
+                }
+            }
+            // Back arrow click in restart submenu
+            if (dist(mouseX, mouseY, 70, 65) < 40) {
+                playSFX(sfxClick);
+                showRestartChoice = false;
+                return;
+            }
+        } else {
+            // Back arrow click → resume (replaces RESUME button)
+            if (dist(mouseX, mouseY, 70, 65) < 40) {
+                playSFX(sfxClick);
+                togglePause();
+                pauseFromState = null;
+                return;
+            }
+            // Pause menu option click (larger hit area)
+            let options = getPauseOptions();
+            let optW = 280, optH = 80;
+            for (let i = 0; i < options.length; i++) {
+                let ox = width / 2;
+                let oy = height / 2 + 20 + i * 80;
+                if (mouseX > ox - optW / 2 && mouseX < ox + optW / 2 &&
+                    mouseY > oy - optH / 2 && mouseY < oy + optH / 2) {
+                    pauseIndex = i;
+                    playSFX(sfxClick);
+                    handlePauseSelection();
+                    return;
+                }
+            }
+        }
+    } else if (state === STATE_ROOM) {
+        // Room back arrow click
+        if (roomScene && roomScene.backButton.checkMouse(mouseX, mouseY)) {
+            roomScene.backButton.handleClick();
+            return;
+        }
         // Pause button hit-test
-        if (dist(mouseX, mouseY, width - 60, 50) < 25) {
+        let pbx = width - 70, pby = 65;
+        if (dist(mouseX, mouseY, pbx, pby) < 60) {
             playSFX(sfxClick);
             togglePause();
-            pauseIndex = 0;
+            pauseIndex = -1;
+            showRestartChoice = false;
+            showStoryRecap = false;
         }
+    } else if (state === STATE_DAY_RUN) {
+        // Pause button hit-test
+        let pbx = width - 70, pby = 65;
+        if (dist(mouseX, mouseY, pbx, pby) < 60) {
+            playSFX(sfxClick);
+            togglePause();
+            pauseIndex = -1;
+            showRestartChoice = false;
+            showStoryRecap = false;
+        }
+    } else if (state === STATE_FAIL || state === STATE_WIN) {
+        if (endScreenManager) endScreenManager.handleClick(mouseX, mouseY);
     }
 
     if (gameState.currentState === STATE_INVENTORY) {
@@ -498,7 +802,6 @@ function mousePressed() {
  * Dispatches mouse release events to the active UI systems.
  */
 function mouseReleased() {
-    if (!gameState) return;
     if (mainMenu) mainMenu.handleRelease();
     if (gameState.currentState === STATE_INVENTORY) {
         if (backpackUI) backpackUI.handleMouseReleased(mouseX, mouseY);
@@ -509,7 +812,6 @@ function mouseReleased() {
  * Dispatches mouse drag events to the active UI systems.
  */
 function mouseDragged() {
-    if (!gameState) return;
     if (gameState.currentState === STATE_INVENTORY) {
         if (backpackUI) backpackUI.handleMouseDragged(mouseX, mouseY);
     }
@@ -518,8 +820,48 @@ function mouseDragged() {
 /**
  * Dispatches mouse move events to the active UI systems.
  */
+function mouseWheel(event) {
+    if (gameState.currentState === STATE_PAUSED && showStoryRecap) {
+        let recap = STORY_RECAPS[storyRecapDay];
+        if (!recap) return false;
+        let maxScroll = max(0, recap.lines.length - 10);
+        if (event.delta > 0) {
+            // Scroll down
+            if (storyScrollOffset >= maxScroll) {
+                // Auto-advance to next day
+                let nextDay = storyRecapDay + 1;
+                let isNextUnlocked = (nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+                if (nextDay <= 5 && isNextUnlocked) {
+                    storyRecapDay = nextDay;
+                    storyScrollOffset = 0;
+                    playSFX(sfxSelect);
+                }
+            } else {
+                storyScrollOffset = min(maxScroll, storyScrollOffset + 2);
+            }
+        } else {
+            // Scroll up
+            if (storyScrollOffset <= 0) {
+                // Auto-retreat to previous day
+                let prevDay = storyRecapDay - 1;
+                if (prevDay >= 1) {
+                    let prevRecap = STORY_RECAPS[prevDay];
+                    storyRecapDay = prevDay;
+                    storyScrollOffset = max(0, prevRecap.lines.length - 10);
+                    playSFX(sfxSelect);
+                }
+            } else {
+                storyScrollOffset = max(0, storyScrollOffset - 2);
+            }
+        }
+        return false; // prevent page scroll
+    }
+}
+
 function mouseMoved() {
-    if (!gameState) return;
+    if (gameState.currentState === STATE_FAIL || gameState.currentState === STATE_WIN) {
+        if (endScreenManager) endScreenManager.handleMouseMove(mouseX, mouseY);
+    }
     if (gameState.currentState === STATE_INVENTORY) {
         if (backpackUI) backpackUI.handleMouseMoved(mouseX, mouseY);
     }
@@ -544,12 +886,28 @@ function togglePause() {
 function setupRun(dayID) {
     currentDayID = dayID;
     player.applyLevelStats(dayID);
-    player.x = GLOBAL_CONFIG.lanes.lane1;
-    player.y = PLAYER_RUN_FOOT_Y;  // Player foot anchor for day run
+    player.x = 500;
+    player.y = height / 2;
     roomScene.reset();
     obstacleManager = new ObstacleManager();
     levelController.initializeLevel(dayID);
     gameState.setState(STATE_ROOM);
+}
+
+/**
+ * [Role: Core Systems Developer]
+ * LEVEL BOOTSTRAP: Starts a specific day directly into the RUN state, skipping the room.
+ */
+function setupRunDirectly(dayID) {
+    currentDayID = dayID;
+    player.applyLevelStats(dayID);
+    
+    // Set position matching the "Exit Door" logic in RoomScene
+    player.x = width / 2; 
+    player.y = height - 200; 
+    
+    obstacleManager = new ObstacleManager();
+    gameState.setState(STATE_DAY_RUN);
 }
 
 
@@ -569,8 +927,8 @@ function drawLoadingScreen() {
     if (assets.uobLogo) {
         push();
         imageMode(CENTER);
-        let wave = sin(frameCount * 0.05);
-        let imgScale = 1.0 + wave * 0.05;
+        let wave       = sin(frameCount * 0.05);
+        let imgScale   = 1.0 + wave * 0.05;
         let alphaValue = 180 + wave * 75;
         tint(255, alphaValue);
         image(assets.uobLogo, cx, cy - 80, 120 * imgScale, 120 * imgScale);
@@ -602,7 +960,7 @@ function drawLoadingScreen() {
  */
 function drawLoadingProgressBar(x, y, progress) {
     let totalSegments = 10;
-    let gap = 8;
+    let gap    = 8;
     let blockW = 24;
     let blockH = 16;
     let totalW = (blockW * totalSegments) + (gap * (totalSegments - 1));
@@ -616,8 +974,8 @@ function drawLoadingProgressBar(x, y, progress) {
 
     rectMode(CORNER);
     for (let i = 0; i < totalSegments; i++) {
-        let bx = (x - totalW / 2) + i * (blockW + gap);
-        let by = y - blockH / 2;
+        let bx        = (x - totalW / 2) + i * (blockW + gap);
+        let by        = y - blockH / 2;
         let threshold = (i + 1) / totalSegments;
 
         if (progress >= threshold) {
@@ -667,17 +1025,17 @@ function drawSplashScreen() {
  */
 function drawLogoPlaceholder(x, y) {
     let isSplash = (gameState.currentState === STATE_SPLASH);
-    let t = frameCount * 0.02;
-    let targetY = isSplash ? (y + 160) : (y + 10);
+    let t        = frameCount * 0.02;
+    let targetY  = isSplash ? (y + 160) : (y + 10);
 
     // Drop-in physics
     if (!titleDrop.landed) {
         titleDrop.vy += 1.2;
-        titleDrop.y += titleDrop.vy;
+        titleDrop.y  += titleDrop.vy;
         if (titleDrop.y >= y + 160) {
-            titleDrop.y = y + 160;
+            titleDrop.y      = y + 160;
             titleDrop.landed = true;
-            titleDrop.shake = 6;
+            titleDrop.shake  = 6;
         }
     } else {
         titleDrop.y = lerp(titleDrop.y, targetY, 0.15);
@@ -697,9 +1055,9 @@ function drawLogoPlaceholder(x, y) {
         push();
         imageMode(CENTER);
         tint(255, 255, 255, 200);
-        image(assets.selectClouds[1], width * 0.1, height * 0.9 + cos(t) * 10, 800, 480);
-        image(assets.selectClouds[2], width * 0.1, height * 0.2 + sin(t) * 10, 700, 420);
-        image(assets.selectClouds[4], width * 1.0, height * 0.09 + sin(t) * 10, 700, 420);
+        image(assets.selectClouds[1], width * 0.1,  height * 0.9  + cos(t) * 10,  800, 480);
+        image(assets.selectClouds[2], width * 0.1,  height * 0.2  + sin(t) * 10,  700, 420);
+        image(assets.selectClouds[4], width * 1.0,  height * 0.09 + sin(t) * 10,  700, 420);
         pop();
     }
 
@@ -780,17 +1138,22 @@ function drawInteractionPrompts() {
  */
 function drawPauseButton() {
     push();
-    let bx = width - 60;
-    let by = 50;
-    noFill();
-    stroke(255, 150);
-    strokeWeight(2);
-    ellipse(bx, by, 40, 40);
-    fill(255, 150);
-    noStroke();
-    rectMode(CENTER);
-    rect(bx - 5, by, 4, 15);
-    rect(bx + 5, by, 4, 15);
+    let sz = 120;
+    let bx = width - 70;
+    let by = 65;
+    let isHover = dist(mouseX, mouseY, bx, by) < sz / 2;
+
+    // Smooth breathing scale: hover targets 1.15, otherwise gentle pulse
+    let breathe = 1.0 + sin(frameCount * 0.06) * 0.03;
+    let targetScale = isHover ? 1.15 : breathe;
+    pauseBtnScale = lerp(pauseBtnScale, targetScale, 0.12);
+
+    imageMode(CENTER);
+    translate(bx, by);
+    scale(pauseBtnScale);
+    if (assets.pauseImg) {
+        image(assets.pauseImg, 0, 0, sz, sz);
+    }
     pop();
 }
 
@@ -802,54 +1165,319 @@ function renderPauseOverlay() {
     if (assets.otherBg) {
         imageMode(CORNER);
         image(assets.otherBg, 0, 0, width, height);
+        noStroke();
+        fill(0, 0, 0, 160);
         rect(0, 0, width, height);
     } else {
         fill(0, 0, 0, 200);
         rect(0, 0, width, height);
     }
 
-    textAlign(CENTER, CENTER);
-    textFont(fonts.title);
-    fill(255);
-    textSize(60);
-    text("PAUSED", width / 2, height / 2 - 100);
+    // Back arrow (top-left) — replaces RESUME, click to go back
+    if (assets.backImg) {
+        let bx = 70, by = 65;
+        let isBackHover = dist(mouseX, mouseY, bx, by) < 40;
+        push();
+        translate(bx, by);
+        if (isBackHover) scale(1.15);
+        imageMode(CENTER);
+        image(assets.backImg, 0, 0, 120, 120);
+        pop();
+    }
 
-    textFont(fonts.body);
-    for (let i = 0; i < PAUSE_OPTIONS.length; i++) {
-        let isSelected = (i === pauseIndex);
-        fill(isSelected ? 255 : 150);
-        textSize(isSelected ? 32 : 28);
-        text(isSelected ? `> ${PAUSE_OPTIONS[i]} <` : PAUSE_OPTIONS[i], width / 2, height / 2 + 20 + i * 60);
+    if (showStoryRecap) {
+        // ── Story Recap page ──
+        renderStoryRecap();
+    } else if (showRestartChoice) {
+        // ── Restart sub-menu ──
+        let titleY = height / 2 - 280;
+        textAlign(CENTER, CENTER);
+        textFont(fonts.title);
+        textSize(48);
+        stroke(0, 0, 0, 180); strokeWeight(6); fill(255, 215, 0);
+        text("RESTART?", width / 2, titleY);
+        noStroke(); fill(255, 215, 0);
+        text("RESTART?", width / 2, titleY);
+
+        let optW = 280, optH = 80;  
+        let spacing = 95;
+        let totalH = (RESTART_OPTIONS.length - 1) * spacing;
+        let startY = (height / 2) - (totalH / 2) + 20;
+
+        let anyRestartHover = false;
+        for (let i = 0; i < RESTART_OPTIONS.length; i++) {
+            let ox = width / 2;
+            let oy = startY + i * spacing;
+            
+            let isHover = (mouseX > ox - optW / 2 && mouseX < ox + optW / 2 &&
+                           mouseY > oy - optH / 2 && mouseY < oy + optH / 2);
+            if (isHover) { restartChoiceIndex = i; anyRestartHover = true; }
+            let isSelected = (i === restartChoiceIndex) && restartChoiceIndex >= 0;
+
+            push();
+            translate(ox, oy);
+            if (isSelected) scale(1.15);
+            imageMode(CENTER);
+            if (assets.btnImg) image(assets.btnImg, 0, 0, optW * 2, optH * 2);
+
+            textFont(fonts.body); textSize(24); textAlign(CENTER, CENTER);
+            stroke(0, 0, 0, 180); strokeWeight(5); fill(255, 215, 0);
+            text(RESTART_OPTIONS[i], 0, -6);
+            noStroke(); fill(255, 215, 0);
+            text(RESTART_OPTIONS[i], 0, -6);
+            pop();
+        }
+        if (!anyRestartHover && !keyIsPressed) restartChoiceIndex = -1;
+        
+    } else {
+        // ── Normal pause menu ──
+        let options = getPauseOptions();
+
+        let titleY = height / 2 - 320;
+        textAlign(CENTER, CENTER);
+        textFont(fonts.title);
+        textSize(60);
+        stroke(0, 0, 0, 180); strokeWeight(6); fill(255, 215, 0);
+        text("PAUSED", width / 2, titleY);
+        noStroke(); fill(255, 215, 0);
+        text("PAUSED", width / 2, titleY);
+
+        let optW = 280, optH = 80;  
+        let spacing = 95;
+        let totalH = (options.length - 1) * spacing;
+        let startY = (height / 2) - (totalH / 2) + 30;
+
+        let anyPauseHover = false;
+        for (let i = 0; i < options.length; i++) {
+            let ox = width / 2;
+            let oy = startY + i * spacing;
+            
+            let isHover = (mouseX > ox - optW / 2 && mouseX < ox + optW / 2 &&
+                           mouseY > oy - optH / 2 && mouseY < oy + optH / 2);
+            if (isHover) { pauseIndex = i; anyPauseHover = true; }
+            let isSelected = (i === pauseIndex) && pauseIndex >= 0;
+
+            push();
+            translate(ox, oy);
+            if (isSelected) scale(1.15);
+            imageMode(CENTER);
+            if (assets.btnImg) image(assets.btnImg, 0, 0, optW * 2, optH * 2);
+
+            textFont(fonts.body); textSize(24); textAlign(CENTER, CENTER);
+            stroke(0, 0, 0, 180); strokeWeight(5); fill(255, 215, 0);
+            text(options[i], 0, -6);
+            noStroke(); fill(255, 215, 0);
+            text(options[i], 0, -6);
+            pop();
+        }
+        if (!anyPauseHover && !keyIsPressed) pauseIndex = -1;
     }
     pop();
 }
 
 /**
- * Renders the win or fail end screen with a contextual message and retry prompt.
+ * Renders the story recap sub-page inside the pause overlay.
+ * Layout: left sidebar (Day 1-5 tabs), center (story text), right (up/down arrows).
  */
-function drawEndScreen() {
-    if (assets.menuBg) image(assets.menuBg, 0, 0, width, height);
-    else background(20);
+function renderStoryRecap() {
+    let dayNames = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"];
 
-    textAlign(CENTER, CENTER);
-    textFont(fonts.title);
-    if (gameState.currentState === STATE_WIN) {
-        fill(100, 255, 100);
-        textSize(80);
-        text("SUCCESS", width / 2, height / 2 - 50);
-    } else {
-        fill(255, 50, 50);
-        textSize(80);
-        text("FAILED", width / 2, height / 2 - 50);
+    // ── Left sidebar: skewed day cards (TimeWheel style) ──
+    let sidebarX = width * 0.12;
+    let sidebarBaseY = height * 0.45;
+    let cardSpacing = 130;
+
+    push();
+    translate(sidebarX, sidebarBaseY);
+    for (let i = 0; i < 5; i++) {
+        let day = i + 1;
+        let diff = i - (storyRecapDay - 1);
+        let distFromCenter = abs(diff);
+        let y = diff * cardSpacing;
+        let x = distFromCenter * 30;
+
+        let isUnlocked = (day <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+        let isSelected = (day === storyRecapDay);
+        let alpha = map(distFromCenter, 0, 2, 255, 50);
+        let s = map(distFromCenter, 0, 1, 1.15, 0.8);
+
+        push();
+        translate(x, y);
+        rotate(radians(-12));
+        scale(constrain(s, 0.5, 1.4));
+
+        noStroke();
+        if (!isUnlocked) {
+            fill(30, 30, 45, alpha * 0.7);
+        } else {
+            fill(isSelected ? [255, 20, 147, alpha] : [70, 20, 90, alpha * 0.6]);
+        }
+
+        beginShape();
+        vertex(-110, -32); vertex(130, -44);
+        vertex(110, 32); vertex(-130, 44);
+        endShape(CLOSE);
+
+        textAlign(LEFT, CENTER);
+        textFont(fonts.title);
+        textSize(40);
+        fill(isSelected ? color(255, 215, 0, alpha) : color(255, alpha));
+        text(day.toString().padStart(2, '0'), -90, 4);
+
+        textFont(fonts.body);
+        textSize(18);
+        fill(isSelected ? color(255, 215, 0, alpha) : color(255, 215, 0, alpha * 0.8));
+        if (isUnlocked) {
+            text(dayNames[i], -10, 8);
+        } else {
+            fill(180, 60, 60, alpha);
+            textSize(14);
+            text("LOCKED", -10, 8);
+        }
+
+        pop();
+    }
+    pop();
+
+    // ── Center: Cloud with story content (bigger) ──
+    let cloudX = width * 0.55;
+    let cloudY = height * 0.48;
+    let cloudW = 900, cloudH = 600;
+    let cloudImg = assets.selectClouds ? assets.selectClouds[0] : null;
+    let isUnlocked = (storyRecapDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL);
+    let recap = STORY_RECAPS[storyRecapDay];
+
+    if (cloudImg) {
+        push();
+        translate(cloudX, cloudY);
+        imageMode(CENTER);
+
+        if (!isUnlocked) {
+            drawingContext.filter = 'grayscale(100%) brightness(0.6)';
+        } else {
+            drawingContext.shadowBlur = 30;
+            drawingContext.shadowColor = 'rgba(255, 105, 180, 0.5)';
+        }
+
+        image(cloudImg, 0, 0, cloudW, cloudH);
+        drawingContext.shadowBlur = 0;
+        drawingContext.filter = 'none';
+        pop();
     }
 
-    textFont(fonts.body);
-    fill(255);
-    textSize(24);
-    let msg = (gameState.failReason === "HIT_BUS") ? "You were hit by a speeding bus." :
-        (gameState.failReason === "EXHAUSTED") ? "You ran out of energy." :
-            (gameState.failReason === "LATE") ? "You are fired!" : "Game Over.";
-    text(msg, width / 2, height / 2 + 20);
-    textSize(18);
-    text("Press ENTER to return to Room", width / 2, height / 2 + 100);
+    // Story text inside cloud area (clipped to ellipse)
+    if (recap && isUnlocked) {
+        push();
+        drawingContext.save();
+        drawingContext.beginPath();
+        drawingContext.ellipse(cloudX, cloudY, cloudW * 0.42, cloudH * 0.38, 0, 0, TWO_PI);
+        drawingContext.clip();
+
+        // Day title at top of cloud
+        textFont(fonts.title);
+        textSize(28);
+        textAlign(CENTER, CENTER);
+        stroke(0, 0, 0, 180); strokeWeight(5); fill(255, 105, 180);
+        text(recap.title, cloudX, cloudY - 200);
+        noStroke(); fill(255, 105, 180);
+        text(recap.title, cloudX, cloudY - 200);
+
+        // Story lines with scroll offset — more lines visible
+        textFont(fonts.body);
+        textSize(22);
+        textAlign(CENTER, CENTER);
+        let lineH = 32;
+        let startY = cloudY - 155;
+        let maxScroll = max(0, recap.lines.length - 10);
+        // Smooth scroll clamp
+        storyScrollOffset = constrain(storyScrollOffset, 0, maxScroll);
+
+        for (let j = 0; j < recap.lines.length; j++) {
+            let visibleIdx = j - storyScrollOffset;
+            let ly = startY + visibleIdx * lineH;
+            if (ly > cloudY - 220 && ly < cloudY + 210) {
+                let lineText = recap.lines[j];
+                if (lineText === "") continue;
+                // Fade lines near edges
+                let edgeFade = 255;
+                if (ly < cloudY - 170) edgeFade = map(ly, cloudY - 220, cloudY - 170, 0, 255);
+                if (ly > cloudY + 160) edgeFade = map(ly, cloudY + 160, cloudY + 210, 255, 0);
+                edgeFade = constrain(edgeFade, 0, 255);
+
+                stroke(0, 0, 0, edgeFade * 0.6); strokeWeight(3); fill(255, 240, 220, edgeFade);
+                text(lineText, cloudX, ly);
+                noStroke(); fill(255, 240, 220, edgeFade);
+                text(lineText, cloudX, ly);
+            }
+        }
+
+        drawingContext.restore();
+        pop();
+
+        // Scroll bar indicator below cloud
+        if (maxScroll > 0) {
+            let barW = 200, barH = 6;
+            let barX = cloudX - barW / 2;
+            let barY = cloudY + cloudH * 0.38 + 15;
+            noStroke();
+            fill(255, 255, 255, 40);
+            rect(barX, barY, barW, barH, 3);
+            let fillW = map(storyScrollOffset, 0, maxScroll, 20, barW);
+            fill(255, 215, 0, 150);
+            rect(barX, barY, fillW, barH, 3);
+        }
+    } else if (!isUnlocked) {
+        textFont(fonts.title);
+        textSize(28);
+        textAlign(CENTER, CENTER);
+        let pulse = sin(frameCount * 0.08) * 40 + 120;
+        stroke(0, 0, 0, 150); strokeWeight(4); fill(pulse, pulse * 0.6, pulse * 0.6);
+        text("REACH DAY " + storyRecapDay + " TO UNLOCK", cloudX, cloudY);
+        noStroke(); fill(pulse, pulse * 0.6, pulse * 0.6);
+        text("REACH DAY " + storyRecapDay + " TO UNLOCK", cloudX, cloudY);
+    }
+
+    // ── Right side: Up/Down arrows — change days (not scroll) ──
+    let arrowX = width - 100;
+    let arrowSz = 56;
+
+    if (assets.backImg) {
+        // Up arrow (previous day)
+        let canGoUp = storyRecapDay > 1;
+        let upHover = canGoUp && dist(mouseX, mouseY, arrowX, height / 2 - 80) < 35;
+        push();
+        translate(arrowX, height / 2 - 80);
+        rotate(HALF_PI);
+        if (!canGoUp) tint(255, 60);
+        if (upHover) scale(1.25);
+        imageMode(CENTER);
+        image(assets.backImg, 0, 0, arrowSz, arrowSz);
+        pop();
+
+        // Down arrow (next day)
+        let nextDay = storyRecapDay + 1;
+        let canGoDown = nextDay <= 5 && ((nextDay <= currentUnlockedDay) || (typeof DEBUG_UNLOCK_ALL !== 'undefined' && DEBUG_UNLOCK_ALL));
+        let downHover = canGoDown && dist(mouseX, mouseY, arrowX, height / 2 + 80) < 35;
+        push();
+        translate(arrowX, height / 2 + 80);
+        rotate(-HALF_PI);
+        if (!canGoDown) tint(255, 60);
+        if (downHover) scale(1.25);
+        imageMode(CENTER);
+        image(assets.backImg, 0, 0, arrowSz, arrowSz);
+        pop();
+    }
+
+    // Day indicator between arrows
+    textFont(fonts.title); textSize(20);
+    textAlign(CENTER, CENTER);
+    stroke(0, 0, 0, 150); strokeWeight(3); fill(255, 215, 0);
+    text("DAY " + storyRecapDay, arrowX, height / 2);
+    noStroke(); fill(255, 215, 0);
+    text("DAY " + storyRecapDay, arrowX, height / 2);
+
+    // Scroll hint
+    textFont(fonts.body); textSize(14);
+    fill(200, 160, 255, 150);
+    text("SCROLL TO READ", arrowX, height / 2 + 140);
 }

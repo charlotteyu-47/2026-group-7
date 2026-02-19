@@ -1,93 +1,17 @@
-// Procedural Level - Difficulty and Process Configuration
-// Defines the obstacle generation rules for each level:
-// available obstacles, generation rate, variant pool, dialogue text, etc.
-
-const DIFFICULTY_PROGRESSION = {
-  //level 1 is tutorial, so no procedural generation config needed
-  1: {
-    description: "Day 1 - Learn the Basics",
-    availableObstacles: [],
-    spawnConfig: {
-      spawnRatePerFrame: 0,
-      minObstacleInterval: 0,
-      buffSpawnRatio: 0,
-    },
-    variants: {}
-  },
-
-  2: {
-    description: "Day 2 - Running Late",
-    availableObstacles: ["LARGE_CAR", "SMALL_CAR"],
-    spawnConfig: {
-      spawnRatePerFrame: 0.05,
-      minObstacleInterval: 50,
-      buffSpawnRatio: 0,
-    },
-    variants: {}
-  },
-
-  3: {
-    description: "Day 3 - Midweek Rush",
-    availableObstacles: ["LARGE_CAR", "SMALL_CAR", "SCOOTER_RIDER", "HOMELESS", "PROMOTER", "COFFEE", "EMPTY_SCOOTER"],
-    spawnConfig: {
-      spawnRatePerFrame: 0.018,
-      minObstacleInterval: 40,
-      buffSpawnRatio: 0.10,
-    },
-    variants: {}
-  },
-
-  4: {
-    description: "Day 4 - Deadline Pressure",
-    availableObstacles: ["LARGE_CAR", "SMALL_CAR", "SCOOTER_RIDER", "HOMELESS", "PROMOTER", "COFFEE", "EMPTY_SCOOTER"],
-    spawnConfig: {
-      spawnRatePerFrame: 0.020,
-      minObstacleInterval: 35,
-      buffSpawnRatio: 0.08,
-    },
-    variants: {}
-  },
-
-  5: {
-    description: "Day 5 - Final Challenge",
-    availableObstacles: ["LARGE_CAR", "SMALL_CAR", "SCOOTER_RIDER", "HOMELESS", "PROMOTER", "COFFEE", "EMPTY_SCOOTER"],
-    spawnConfig: {
-      spawnRatePerFrame: 0.022,
-      minObstacleInterval: 30,
-      buffSpawnRatio: 0.06,
-    },
-    variants: {}
-  }
-};
+// 程序化关卡障碍物生成逻辑 - 用于第2-4关
 
 class ProceduralLevel {
   constructor(dayID, config) {
     this.dayID = dayID;
     this.config = config;
-    this.levelText = `Day ${dayID} - ${DIFFICULTY_PROGRESSION[dayID]?.description || 'Unknown'}`;
+    this.levelText = `this is level${dayID}`;
     this.frameCounter = 0;
-    this.displayDuration = 180; // 3 seconds display (60fps)
-    // Get current level difficulty config
-    this.difficultyConfig = DIFFICULTY_PROGRESSION[dayID] || DIFFICULTY_PROGRESSION[1];
-  }
-
-  /**
-   * Get current level difficulty config
-   */
-  getDifficultyConfig() {
-    return this.difficultyConfig;
-  }
-
-  /**
-   * Get obstacle variant config for specified type
-   */
-  getObstacleVariant(obstacleType) {
-    return this.difficultyConfig.variants[obstacleType] || null;
+    this.displayDuration = 180; // 3秒显示（60fps）
   }
 
   setup() {
     console.log(`[ProceduralLevel] Setup - ${this.levelText}`);
-    console.log(`[ProceduralLevel] Available obstacles:`, this.difficultyConfig.availableObstacles);
+    console.log(this.levelText);
     this.frameCounter = 0;
   }
 
@@ -101,6 +25,7 @@ class ProceduralLevel {
         levelController.triggerVictoryPhase();
       }
     }
+
   }
 
   display() {
