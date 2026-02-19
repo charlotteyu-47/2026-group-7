@@ -54,9 +54,9 @@ class Egg {
     arc(0, -35, 30, 20, 0, PI);
     pop();
   }
-} // <--- Make sure this is closed!
+} 
 
-// --- HAT CLASS ---
+// egg hat
 class Hat {
   display(x, y, tilt, scalar) {
     push();
@@ -74,7 +74,6 @@ class Hat {
   }
 }
 
-// --- RING CLASS ---
 class Ring {
   constructor() { // Added constructor
     this.x = 0;
@@ -109,7 +108,6 @@ class Ring {
   }
 }
 
-// --- EGGRING CLASS (COMPOSITE) ---
 class EggRing {
   constructor(x, y, t, sp) {
     this.x = x;
